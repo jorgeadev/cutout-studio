@@ -17,9 +17,11 @@ Small documentation corrections and clearly scoped bug fixes can go directly to 
 
 Requirements:
 
-- Node.js `^20.19.0` or `>=22.12.0`
+- Node.js `>=22.13.0` for local development
 - pnpm `11.17.0`
 - A modern browser with WebAssembly support
+
+The CI matrix tests Node.js 20.19 through pnpm's standalone executable. Use Node.js 22 or newer when running the regular pnpm 11 CLI locally.
 
 Fork the repository on GitHub, then clone your fork:
 
@@ -27,7 +29,7 @@ Fork the repository on GitHub, then clone your fork:
 git clone https://github.com/YOUR-USERNAME/cutout-studio.git
 cd cutout-studio
 git remote add upstream https://github.com/jorgeadev/cutout-studio.git
-corepack enable
+npm install --global pnpm@11.17.0
 pnpm install --frozen-lockfile
 pnpm dev
 ```

@@ -63,6 +63,11 @@ describe("repository automation security", () => {
 				expect(reference, `${fileName}: ${reference}`).toMatch(/^[\w.-]+\/[\w.-]+(?:\/[\w.-]+)?@[0-9a-f]{40}$/);
 			}
 			if (workflow.includes("actions/checkout@")) expect(workflow).toMatch(/persist-credentials:\s*false/);
+			if (workflow.includes("pnpm install")) {
+				expect(workflow).toMatch(/pnpm\/action-setup@[0-9a-f]{40}/);
+				expect(workflow).not.toContain("corepack enable");
+			}
+			if (workflow.includes('"20.19.0"')) expect(workflow).toMatch(/standalone:\s*true/);
 			expect(workflow).toMatch(/^permissions:/m);
 			expect(workflow).not.toContain("permissions: write-all");
 			expect(workflow).not.toContain("pull_request_target");
