@@ -8,7 +8,7 @@ on:
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
     paths:
       - package.json
       - pnpm-lock.yaml
