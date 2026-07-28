@@ -1,0 +1,10 @@
+saveExact: true
+autoInstallPeers: false
+overrides:
+  hono: 4.12.25
+allowBuilds:
+  msw: false
+  protobufjs: false
+  sharp: false
+minimumReleaseAgeExclude:
+  - shadcn@4.16.0

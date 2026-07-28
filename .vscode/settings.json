@@ -1,0 +1,31 @@
+{
+	"editor.defaultFormatter": "biomejs.biome",
+	"editor.formatOnSave": true,
+	"editor.codeActionsOnSave": {
+		"source.fixAll.biome": "explicit",
+		"source.organizeImports.biome": "explicit"
+	},
+	// Default line ending
+	"files.eol": "\n",
+	// Use tabs instead of spaces
+	"editor.insertSpaces": false,
+	"editor.detectIndentation": false,
+	"editor.tabSize": 4,
+	// ----- Format on Save -----
+	"editor.formatOnPaste": true,
+	"editor.formatOnType": true,
+	"css.lint.unknownAtRules": "ignore"
+	// "biome.enabled": true,
+	// "[javascript]": {
+	// 	"editor.defaultFormatter": "biomejs.biome",
+	// 	"editor.formatOnSave": true
+	// },
+	// "[typescript]": {
+	// 	"editor.defaultFormatter": "biomejs.biome",
+	// 	"editor.formatOnSave": true
+	// },
+	// "[typescriptreact]": {
+	// 	"editor.defaultFormatter": "biomejs.biome",
+	// 	"editor.formatOnSave": true
+	// }
+}

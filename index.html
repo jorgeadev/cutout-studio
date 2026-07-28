@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" class="bg-background">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="light dark" />
+		<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+		<meta
+			name="description"
+			content="Remove the background from one or many images right in your browser, add a solid color or gradient, compare before and after, then download individually or as a ZIP."
+		/>
+		<meta
+			name="keywords"
+			content="background remover, remove background, batch image editing, transparent PNG, image cutout"
+		/>
+		<meta name="application-name" content="cutout-studio" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="cutout-studio" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta property="og:title" content="cutout-studio — Batch Background Remover" />
+		<meta
+			property="og:description"
+			content="On-device background removal for one or many images, with custom color and gradient backdrops."
+		/>
+		<meta property="og:type" content="website" />
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+		<link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+		<title>cutout-studio — Batch Background Remover</title>
+		<script>
+			const themeKey = "cutout-studio-theme";
+			const theme = localStorage.getItem(themeKey) ?? localStorage.getItem("cutout-theme");
+			if (theme && !localStorage.getItem(themeKey)) localStorage.setItem(themeKey, theme);
+			const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+			document.documentElement.classList.toggle("dark", dark);
+			document.documentElement.classList.toggle("light", !dark);
+		</script>
+	</head>
+	<body class="font-sans antialiased">
+		<div id="root"></div>
+		<script type="module" src="/src/main.tsx"></script>
+	</body>
+</html>

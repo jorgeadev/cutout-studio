@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+	<defs>
+		<pattern id="checker" width="8" height="8" patternUnits="userSpaceOnUse">
+			<rect width="8" height="8" fill="#27272a" />
+			<path d="M0 0h4v4H0zm4 4h4v4H4z" fill="#71717a" />
+		</pattern>
+	</defs>
+	<rect width="64" height="64" rx="14" fill="#18181b" />
+	<rect x="15" y="24" width="29" height="27" rx="7" fill="#06b6d4" />
+	<rect x="26" y="13" width="25" height="31" rx="7" fill="url(#checker)" stroke="#22d3ee" stroke-width="3" />
+	<path d="M26 25h7a11 11 0 0 1 11 11v8H33a7 7 0 0 1-7-7z" fill="#06b6d4" fill-opacity=".55" />
+</svg>
