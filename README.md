@@ -161,7 +161,14 @@ cutout-studio/
 
 ## Contributing
 
-Contributions are welcome. Before opening a pull request:
+Contributions from the community are welcome. Start with the [contributing guide](CONTRIBUTING.md), which covers local setup, project conventions, testing, and the pull-request process.
+
+- Use the repository's structured issue forms for bugs, features, documentation improvements, and questions.
+- Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in every project space.
+- Read the [support guide](SUPPORT.md) before requesting help.
+- Report vulnerabilities privately according to the [security policy](SECURITY.md).
+
+Before opening a pull request, run:
 
 ```bash
 pnpm lint
@@ -169,7 +176,7 @@ pnpm typecheck
 pnpm build
 ```
 
-Keep image processing client-side, preserve keyboard and screen-reader behavior, and document any new model downloads or network requests.
+Keep image processing client-side, preserve keyboard and screen-reader behavior, and document any new model downloads or network requests. All contributions are submitted under the repository's AGPL-3.0-only license.
 
 ## License
 

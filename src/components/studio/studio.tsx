@@ -1,4 +1,4 @@
-import { CloudOff, FileArchive, HardDrive, Images, Layers, ShieldCheck, Sparkles, Trash2, WandSparkles } from "lucide-react";
+import { CloudOff, CodeXml, FileArchive, HardDrive, Images, Layers, ShieldCheck, Sparkles, Trash2, WandSparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BackgroundPicker } from "@/components/studio/background-picker";
@@ -495,7 +495,18 @@ export const Studio = () => {
 
 						<div className="flex flex-col gap-2 border-t border-border/60 bg-muted/20 px-5 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-7">
 							<p>cutout-studio · On-device background removal</p>
-							<p className="font-mono uppercase tracking-wider">PNG · WebP · JPG · ZIP</p>
+							<div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+								<a
+									href="https://github.com/jorgeadev/cutout-studio"
+									target="_blank"
+									rel="noreferrer"
+									className="inline-flex cursor-pointer items-center gap-1.5 font-medium text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline"
+								>
+									<CodeXml className="size-3.5" aria-hidden="true" />
+									Source and license
+								</a>
+								<p className="font-mono uppercase tracking-wider">PNG · WebP · JPG · ZIP</p>
+							</div>
 						</div>
 					</div>
 				</div>

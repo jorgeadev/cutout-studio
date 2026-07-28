@@ -1,0 +1,159 @@
+name: Bug report
+description: Report a reproducible problem in cutout-studio.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve cutout-studio. Please provide enough detail for another person to reproduce the problem.
+
+        **Do not report security vulnerabilities here.** Follow the repository security policy instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and did not find a duplicate.
+          required: true
+        - label: I reproduced the problem with the latest version of the app.
+          required: true
+        - label: I have removed private images, personal information, access tokens, and other sensitive data.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Which part of the app is having the problem?
+      options:
+        - Upload, paste, or camera input
+        - Model download or preparation
+        - Background removal
+        - Edge refinement
+        - Background color or gradient
+        - Before/after preview
+        - Export or ZIP download
+        - Theme or visual styling
+        - PWA, service worker, or offline use
+        - Accessibility or keyboard navigation
+        - Build or development tooling
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem summary
+      description: Clearly describe what went wrong and how it affects you.
+      placeholder: When I select Studio and process a PNG, the queue...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reliable sequence that demonstrates the problem.
+      placeholder: |
+        1. Open the app in...
+        2. Select...
+        3. Upload...
+        4. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: The image should...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: Instead, the app...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      options:
+        - Not applicable
+        - Swift (8-bit)
+        - Studio (16-bit)
+        - Max (32-bit)
+        - All models
+    validations:
+      required: true
+
+  - type: dropdown
+    id: processor
+    attributes:
+      label: Processor
+      options:
+        - Not applicable
+        - Auto
+        - WebGPU
+        - CPU
+        - All processors
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: Include the browser name and version.
+      placeholder: Chrome 140.0
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: Operating system and device
+      placeholder: Windows 11 on desktop, Android 16 on Pixel, etc.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App version, commit, or deployment URL
+      description: A commit SHA or the URL where the issue occurred is useful.
+      placeholder: develop@abc1234 or https://example.com
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Relevant console output
+      description: Paste only logs related to the issue and redact sensitive information.
+      render: shell
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or sample files
+      description: Drag in a non-sensitive screenshot or minimal sample image when it materially helps reproduce the issue.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add anything else that may help diagnose the problem.
+
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Community agreement
+      options:
+        - label: I agree to follow this project's Code of Conduct.
+          required: true
