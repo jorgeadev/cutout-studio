@@ -1,0 +1,95 @@
+name: Feature request
+description: Propose an improvement that fits cutout-studio's private, on-device workflow.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Explain the user problem first so the proposal can be evaluated against the project's privacy, accessibility, and performance goals.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for a similar request.
+          required: true
+        - label: This request is about one focused improvement.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature area
+      options:
+        - Upload and image input
+        - AI models and processing
+        - Edge refinement
+        - Background customization
+        - Preview and comparison
+        - Export and downloads
+        - Batch workflow
+        - Offline and PWA behavior
+        - Accessibility
+        - User interface and themes
+        - Developer experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What is difficult today, and who would benefit from improving it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior and user experience you would like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or other designs have you considered?
+
+  - type: dropdown
+    id: privacy
+    attributes:
+      label: Privacy or network impact
+      description: cutout-studio keeps user images on-device by default.
+      options:
+        - No new network access or user-data handling
+        - Adds a model or static asset download
+        - Changes how user data is stored or transmitted
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: design
+    attributes:
+      label: Additional context or mockups
+      description: Add diagrams, screenshots, examples, or implementation notes if useful.
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to help implement this feature after the approach is accepted.
+
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Community agreement
+      options:
+        - label: I agree to follow this project's Code of Conduct.
+          required: true

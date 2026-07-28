@@ -1,0 +1,66 @@
+name: Question or help
+description: Ask for help using, developing, or deploying cutout-studio.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the README and troubleshooting guide before asking a question. For reproducible defects, use the bug report form instead.
+
+        Never include private images, credentials, tokens, or security vulnerabilities in a public issue.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked the README, troubleshooting section, and existing issues.
+          required: true
+        - label: This is not a security vulnerability or confidential report.
+          required: true
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Using the app
+        - Models or processing options
+        - Browser compatibility
+        - Local development
+        - Deployment and isolation headers
+        - PWA or offline behavior
+        - Contributing
+        - Licensing
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Be specific about what you are trying to accomplish and where you are blocked.
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What have you tried?
+      description: Include relevant commands, settings, or documentation you followed.
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include browser, operating system, or Node.js version when relevant.
+
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Community agreement
+      options:
+        - label: I agree to follow this project's Code of Conduct.
+          required: true
