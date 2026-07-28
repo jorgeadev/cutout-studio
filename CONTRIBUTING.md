@@ -90,8 +90,11 @@ Run all required checks before opening a pull request:
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test:coverage
 pnpm build
 ```
+
+`pnpm test:coverage` enforces the repository's coverage floor. Add focused regression tests whenever behavior changes; do not lower thresholds, delete assertions, or skip failures merely to make a change pass.
 
 For user-interface changes, also test manually:
 
@@ -101,6 +104,12 @@ For user-interface changes, also test manually:
 - At least one successful image-processing and export flow when the change touches runtime behavior
 
 Describe the scenarios you tested in the pull request. Add before-and-after screenshots for visual changes, using non-sensitive content.
+
+## AI-assisted contributions
+
+AI coding tools may help draft a contribution, but the submitting human remains responsible for understanding, validating, licensing, and maintaining everything in the diff. Read and follow [AI_CONTRIBUTIONS.md](AI_CONTRIBUTIONS.md), disclose material assistance in the pull request, and never put secrets, private images, unpublished vulnerabilities, or other confidential data into a prompt.
+
+Verify suggested package names and APIs against official sources before installation. AI tools can hallucinate convincing packages and can repeat the same error across implementation, tests, and documentation. Generated tests are not independent evidence by themselves.
 
 ## Commits
 
@@ -122,8 +131,9 @@ When opening a pull request:
 2. Link the relevant issue with `Closes #123` when applicable.
 3. Explain the motivation and important design decisions.
 4. List automated and manual testing.
-5. Disclose privacy, network, storage, bundle-size, or model-download effects.
-6. Respond respectfully to review feedback and update the branch rather than opening replacement pull requests.
+5. Disclose material AI assistance and how you verified it.
+6. Disclose privacy, network, storage, bundle-size, or model-download effects.
+7. Respond respectfully to review feedback and update the branch rather than opening replacement pull requests.
 
 A maintainer may ask for a change to be split, redesigned, documented, or tested before it is merged. Submission does not guarantee acceptance.
 

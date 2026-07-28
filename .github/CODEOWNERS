@@ -1,0 +1,12 @@
+# Route application and policy changes to the maintainer; enforce reviews with a GitHub ruleset.
+* @jorgeadev
+
+/.github/ @jorgeadev
+/AI_CONTRIBUTIONS.md @jorgeadev
+/SECURITY.md @jorgeadev
+/pnpm-lock.yaml @jorgeadev
+/pnpm-workspace.yaml @jorgeadev
+/public/sw.js @jorgeadev
+/src/lib/remove-background.ts @jorgeadev
+/vercel.json @jorgeadev
+/vite.config.ts @jorgeadev
