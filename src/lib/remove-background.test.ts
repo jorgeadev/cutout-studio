@@ -94,6 +94,56 @@ describe("model runtime configuration", () => {
 		expect(progress).toHaveBeenCalledWith(0.75, "Downloading model");
 	});
 
+	it("retries automatic model preloading on CPU when WebGPU cannot initialize", async () => {
+		const progress = vi.fn();
+		backgroundRemovalMocks.preload.mockRejectedValueOnce(new Error("no available backend found. ERR: [webgpu] webgpuInit is not a function")).mockResolvedValueOnce(undefined);
+
+		await expect(preloadBackgroundModel({ device: "auto", model: "isnet_quint8", onProgress: progress })).resolves.toBeUndefined();
+
+		expect(backgroundRemovalMocks.preload).toHaveBeenCalledTimes(2);
+		expect(backgroundRemovalMocks.preload.mock.calls[0]?.[0]).toMatchObject({ device: "gpu" });
+		expect(backgroundRemovalMocks.preload.mock.calls[1]?.[0]).toMatchObject({ device: "cpu" });
+		expect(progress).toHaveBeenCalledWith(0, "WebGPU unavailable; retrying with CPU");
+	});
+
+	it("retries automatic removal on CPU when WebGPU cannot initialize", async () => {
+		const cutout = new Blob(["cutout"], { type: "image/png" });
+		const progress = vi.fn();
+		backgroundRemovalMocks.removeBackground
+			.mockRejectedValueOnce(new Error("no available backend found. ERR: [webgpu] webgpuInit is not a function"))
+			.mockResolvedValueOnce(cutout);
+
+		await expect(
+			removeImageBackground(new Blob(["source"]), {
+				algorithm: "natural",
+				device: "auto",
+				model: "isnet_fp16",
+				onProgress: progress,
+			}),
+		).resolves.toBe(cutout);
+
+		expect(backgroundRemovalMocks.removeBackground).toHaveBeenCalledTimes(2);
+		expect(backgroundRemovalMocks.removeBackground.mock.calls[0]?.[1]).toMatchObject({ device: "gpu" });
+		expect(backgroundRemovalMocks.removeBackground.mock.calls[1]?.[1]).toMatchObject({ device: "cpu" });
+		expect(progress).toHaveBeenCalledWith(0, "WebGPU unavailable; retrying with CPU");
+	});
+
+	it("does not override an explicitly selected WebGPU device", async () => {
+		const backendError = new Error("[webgpu] adapter initialization failed");
+		backgroundRemovalMocks.removeBackground.mockRejectedValue(backendError);
+
+		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "natural", device: "gpu", model: "isnet" })).rejects.toBe(backendError);
+		expect(backgroundRemovalMocks.removeBackground).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not mask unrelated errors while using automatic device selection", async () => {
+		const downloadError = new Error("Model download failed");
+		backgroundRemovalMocks.removeBackground.mockRejectedValue(downloadError);
+
+		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "natural", device: "auto", model: "isnet" })).rejects.toBe(downloadError);
+		expect(backgroundRemovalMocks.removeBackground).toHaveBeenCalledTimes(1);
+	});
+
 	it("handles progress events without totals", async () => {
 		const progress = vi.fn();
 		backgroundRemovalMocks.preload.mockImplementation(async (...args: unknown[]) => {

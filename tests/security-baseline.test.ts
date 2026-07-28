@@ -96,12 +96,24 @@ describe("repository automation security", () => {
 
 	it("keeps package installation supply-chain policies enabled", () => {
 		const pnpmPolicy = readRepositoryFile("pnpm-workspace.yaml");
+		expect(pnpmPolicy).toMatch(/^strictPeerDependencies:\s*true$/m);
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAge:\s*1440$/m);
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAgeStrict:\s*true$/m);
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAgeIgnoreMissingTime:\s*false$/m);
 		expect(pnpmPolicy).toMatch(/^trustPolicy:\s*no-downgrade$/m);
 		expect(pnpmPolicy).toMatch(/^trustLockfile:\s*false$/m);
 		expect(pnpmPolicy).toMatch(/^blockExoticSubdeps:\s*true$/m);
+	});
+
+	it("keeps ONNX Runtime aligned with the background-removal peer dependency", () => {
+		const applicationPackage = JSON.parse(readRepositoryFile("package.json")) as {
+			dependencies: Record<string, string>;
+		};
+		const backgroundRemovalPackage = JSON.parse(readRepositoryFile("node_modules", "@imgly", "background-removal", "package.json")) as {
+			peerDependencies: Record<string, string>;
+		};
+
+		expect(applicationPackage.dependencies["onnxruntime-web"]).toBe(backgroundRemovalPackage.peerDependencies["onnxruntime-web"]);
 	});
 
 	it("requires human accountability and security checks for AI-assisted changes", () => {
