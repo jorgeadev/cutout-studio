@@ -1,7 +1,7 @@
 <div align="center">
   <img src="public/icon.svg" alt="cutout-studio icon" width="96" height="96" />
 
-  <h1>cutout-studio</h1>
+  <h1>Cutout Studio</h1>
 
   <p>
     Private, browser-based background removal for individual images and batches.
