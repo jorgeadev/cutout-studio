@@ -1,6 +1,9 @@
 /* Minimal offline-first service worker for cutout-studio. */
 const CACHE = "cutout-studio-v3";
 const SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/app-icon-192.png"];
+const MODEL_ASSET_HOST = "staticimgly.com";
+
+const isTrustedModelHostname = (hostname) => hostname === MODEL_ASSET_HOST || hostname.endsWith(`.${MODEL_ASSET_HOST}`);
 
 self.addEventListener("install", (event) => {
 	event.waitUntil(
@@ -25,7 +28,7 @@ self.addEventListener("fetch", (event) => {
 	if (request.method !== "GET") return;
 
 	const url = new URL(request.url);
-	const isModelAsset = url.hostname.endsWith("staticimgly.com");
+	const isModelAsset = isTrustedModelHostname(url.hostname);
 	const isSameOrigin = url.origin === self.location.origin;
 
 	if (!isSameOrigin && !isModelAsset) return;

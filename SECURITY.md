@@ -2,6 +2,8 @@
 
 cutout-studio processes user-selected images locally, so reports involving unexpected data transmission, browser storage, model integrity, service workers, or cross-origin isolation are taken seriously.
 
+Maintainers should also apply the non-file protections in the [repository security settings checklist](.github/REPOSITORY_SECURITY.md).
+
 ## Supported versions
 
 This project is currently pre-1.0. Security fixes are applied to the latest code on the repository's active development branch. Older commits, forks, and third-party deployments are not separately supported.
@@ -37,6 +39,7 @@ Examples include:
 - Exposure of credentials, private configuration, or sensitive telemetry
 - A dependency or model-asset integrity issue affecting the deployed app
 - A bypass of an intended browser security boundary
+- AI-assisted code that exposes sensitive prompt data, trusts a malicious instruction, broadens permissions, or introduces a hallucinated or typo-squatted dependency
 
 Model quality problems, unsupported browsers, ordinary processing failures, and public dependency advisories without a project-specific impact should use the normal bug form instead.
 
