@@ -96,8 +96,11 @@ describe("model runtime configuration", () => {
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> 7fa4dc7 (fix: enhance WebGPU error handling and retry logic for background removal (#8))
+=======
+>>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
 	it("retries automatic model preloading on CPU when WebGPU cannot initialize", async () => {
 		const progress = vi.fn();
 		backgroundRemovalMocks.preload.mockRejectedValueOnce(new Error("no available backend found. ERR: [webgpu] webgpuInit is not a function")).mockResolvedValueOnce(undefined);
@@ -149,10 +152,13 @@ describe("model runtime configuration", () => {
 	});
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> ece89de (Fix/dependencies error (#6))
 =======
 >>>>>>> 7fa4dc7 (fix: enhance WebGPU error handling and retry logic for background removal (#8))
+=======
+>>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
 	it("handles progress events without totals", async () => {
 		const progress = vi.fn();
 		backgroundRemovalMocks.preload.mockImplementation(async (...args: unknown[]) => {

@@ -4,6 +4,7 @@ on:
   pull_request:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     branches: [develop]
 =======
     branches: [main, develop]
@@ -11,6 +12,9 @@ on:
 =======
     branches: [develop]
 >>>>>>> f80b59b (Fix/dependencies error (#7))
+=======
+    branches: [develop]
+>>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
 
 permissions:
   contents: read

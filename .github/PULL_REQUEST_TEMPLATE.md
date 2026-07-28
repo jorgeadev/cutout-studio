@@ -4,6 +4,7 @@
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 > [!IMPORTANT]
 > Set the base branch to `develop`. Pull requests must never target `main`.
 
@@ -14,6 +15,11 @@
 > Set the base branch to `develop`. Pull requests must never target `main`.
 
 >>>>>>> f80b59b (Fix/dependencies error (#7))
+=======
+> [!IMPORTANT]
+> Set the base branch to `develop`. Pull requests must never target `main`.
+
+>>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
 ## Related issue
 
 <!-- Use "Closes #123" when this pull request should close an issue after merging. -->
@@ -74,6 +80,7 @@ Manual checks:
 =======
 ## Contributor checklist
 
+- [ ] This pull request targets `develop`, not `main`.
 - [ ] I kept this pull request focused and reviewed my own changes.
 >>>>>>> bf625f9 (feat: add issue and pull request templates, contributing guide, code of conduct, and security policy)
 =======
