@@ -101,10 +101,13 @@ describe("repository automation security", () => {
 	it("keeps package installation supply-chain policies enabled", () => {
 		const pnpmPolicy = readRepositoryFile("pnpm-workspace.yaml");
 		expect(pnpmPolicy).toMatch(/^strictPeerDependencies:\s*true$/m);
+<<<<<<< HEAD
 =======
 	it("keeps package installation supply-chain policies enabled", () => {
 		const pnpmPolicy = readRepositoryFile("pnpm-workspace.yaml");
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+>>>>>>> 7fa4dc7 (fix: enhance WebGPU error handling and retry logic for background removal (#8))
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAge:\s*1440$/m);
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAgeStrict:\s*true$/m);
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAgeIgnoreMissingTime:\s*false$/m);
@@ -114,6 +117,9 @@ describe("repository automation security", () => {
 	});
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 7fa4dc7 (fix: enhance WebGPU error handling and retry logic for background removal (#8))
 	it("keeps ONNX Runtime aligned with the background-removal peer dependency", () => {
 		const applicationPackage = JSON.parse(readRepositoryFile("package.json")) as {
 			dependencies: Record<string, string>;
@@ -125,8 +131,11 @@ describe("repository automation security", () => {
 		expect(applicationPackage.dependencies["onnxruntime-web"]).toBe(backgroundRemovalPackage.peerDependencies["onnxruntime-web"]);
 	});
 
+<<<<<<< HEAD
 =======
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+>>>>>>> 7fa4dc7 (fix: enhance WebGPU error handling and retry logic for background removal (#8))
 	it("requires human accountability and security checks for AI-assisted changes", () => {
 		const policy = readRepositoryFile("AI_CONTRIBUTIONS.md").toLowerCase();
 		const pullRequestTemplate = readRepositoryFile(".github", "PULL_REQUEST_TEMPLATE.md").toLowerCase();
