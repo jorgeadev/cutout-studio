@@ -169,6 +169,8 @@ cutout-studio/
 
 Contributions from the community are welcome. Start with the [contributing guide](CONTRIBUTING.md), which covers local setup, project conventions, testing, and the pull-request process. Material AI-assisted contributions must also follow the [AI-assisted contribution policy](AI_CONTRIBUTIONS.md).
 
+All pull requests must target `develop`; never use `main` as the base branch.
+
 - Use the repository's structured issue forms for bugs, features, documentation improvements, and questions.
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in every project space.
 - Read the [support guide](SUPPORT.md) before requesting help.

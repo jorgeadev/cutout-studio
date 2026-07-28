@@ -74,6 +74,26 @@ describe("repository automation security", () => {
 		}
 	});
 
+	it("targets every automated pull request at develop", () => {
+		const workflowDirectory = join(repositoryRoot, ".github", "workflows");
+		const workflowFiles = readdirSync(workflowDirectory).filter((fileName) => fileName.endsWith(".yml") || fileName.endsWith(".yaml"));
+		for (const fileName of workflowFiles) {
+			const workflow = readFileSync(join(workflowDirectory, fileName), "utf8");
+			if (!workflow.includes("pull_request:")) continue;
+			expect(workflow, fileName).toMatch(/pull_request:\s*\r?\n\s+branches:\s*\[develop\]/);
+			expect(workflow, fileName).not.toMatch(/pull_request:\s*\r?\n\s+branches:\s*\[[^\]]*main/);
+		}
+
+		const dependabot = readRepositoryFile(".github", "dependabot.yml");
+		const ecosystems = dependabot.match(/^\s+- package-ecosystem:/gm) ?? [];
+		const developTargets = dependabot.match(/^\s+target-branch:\s*develop$/gm) ?? [];
+		expect(developTargets).toHaveLength(ecosystems.length);
+
+		const pullRequestTemplate = readRepositoryFile(".github", "PULL_REQUEST_TEMPLATE.md");
+		expect(pullRequestTemplate).toContain("base branch to `develop`");
+		expect(pullRequestTemplate).toContain("never target `main`");
+	});
+
 	it("keeps package installation supply-chain policies enabled", () => {
 		const pnpmPolicy = readRepositoryFile("pnpm-workspace.yaml");
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAge:\s*1440$/m);

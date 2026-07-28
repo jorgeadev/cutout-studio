@@ -2,6 +2,9 @@
 
 <!-- Explain what changed and why. Focus on the user or developer problem being solved. -->
 
+> [!IMPORTANT]
+> Set the base branch to `develop`. Pull requests must never target `main`.
+
 ## Related issue
 
 <!-- Use "Closes #123" when this pull request should close an issue after merging. -->
@@ -44,6 +47,7 @@ Manual checks:
 
 ## Contributor checklist
 
+- [ ] This pull request targets `develop`, not `main`.
 - [ ] I kept this pull request focused and reviewed my own changes.
 - [ ] I disclosed material AI assistance and remain accountable for every submitted line, dependency, asset, test, and claim.
 - [ ] I linked or explained the related issue and updated documentation where needed.

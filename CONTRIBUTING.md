@@ -47,6 +47,8 @@ git pull --ff-only upstream develop
 git switch -c fix/short-description
 ```
 
+Open every pull request against `develop`. Never use `main` as a pull-request base branch.
+
 Use a descriptive prefix such as `fix/`, `feature/`, `docs/`, `refactor/`, or `chore/`.
 
 Do not mix unrelated cleanup with a feature or bug fix. Smaller pull requests are easier to review and safer to merge.
@@ -129,13 +131,14 @@ Keep generated output, `dist/`, local environment files, model caches, and edito
 
 When opening a pull request:
 
-1. Complete the pull request template.
-2. Link the relevant issue with `Closes #123` when applicable.
-3. Explain the motivation and important design decisions.
-4. List automated and manual testing.
-5. Disclose material AI assistance and how you verified it.
-6. Disclose privacy, network, storage, bundle-size, or model-download effects.
-7. Respond respectfully to review feedback and update the branch rather than opening replacement pull requests.
+1. Set `develop` as the base branch. Never target `main`.
+2. Complete the pull request template.
+3. Link the relevant issue with `Closes #123` when applicable.
+4. Explain the motivation and important design decisions.
+5. List automated and manual testing.
+6. Disclose material AI assistance and how you verified it.
+7. Disclose privacy, network, storage, bundle-size, or model-download effects.
+8. Respond respectfully to review feedback and update the branch rather than opening replacement pull requests.
 
 A maintainer may ask for a change to be split, redesigned, documented, or tested before it is merged. Submission does not guarantee acceptance.
 
