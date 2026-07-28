@@ -60,15 +60,17 @@ The first run for a model takes longer because its assets must be downloaded. Pr
 
 ### Requirements
 
-- Node.js `^20.19.0` or `>=22.12.0`
+- Node.js `>=22.13.0` for local development
 - pnpm `11.17.0` (the version declared by the project)
 - A modern browser with WebAssembly support; a WebGPU-capable browser is recommended for GPU acceleration
+
+The CI matrix still tests application compatibility with Node.js 20.19 by using pnpm's standalone executable; the regular pnpm 11 CLI requires Node.js 22 or newer.
 
 Clone the repository, then run:
 
 ```bash
 cd cutout-studio
-corepack enable
+npm install --global pnpm@11.17.0
 pnpm install --frozen-lockfile
 pnpm dev
 ```
@@ -82,6 +84,10 @@ Open the local URL printed by Vite. Use the development server instead of openin
 | `pnpm dev` | Start the Vite development server with cross-origin isolation headers |
 | `pnpm typecheck` | Validate the TypeScript project without emitting files |
 | `pnpm lint` | Run Biome over the repository |
+| `pnpm test` | Run the Vitest unit and security regression suite once |
+| `pnpm test:coverage` | Run tests and enforce the coverage thresholds |
+| `pnpm audit` | Check the locked dependency graph for moderate-or-higher known vulnerabilities |
+| `pnpm check` | Run every lint, type, test, coverage, and production-build check |
 | `pnpm build` | Type-check and create the production bundle in `dist/` |
 | `pnpm preview` | Preview the production bundle locally with the required headers |
 
@@ -143,7 +149,7 @@ cutout-studio/
 
 | Area | Technology |
 | --- | --- |
-| UI | React 19, TypeScript, Tailwind CSS 4, shadcn, Base UI |
+| UI | React 19, TypeScript, Tailwind CSS 4, local shadcn-style primitives, Base UI |
 | Build tooling | Vite 8, pnpm, Biome |
 | Background removal | IMG.LY Background Removal, IS-Net, ONNX Runtime Web |
 | Export | Canvas API, JSZip |
@@ -161,7 +167,7 @@ cutout-studio/
 
 ## Contributing
 
-Contributions from the community are welcome. Start with the [contributing guide](CONTRIBUTING.md), which covers local setup, project conventions, testing, and the pull-request process.
+Contributions from the community are welcome. Start with the [contributing guide](CONTRIBUTING.md), which covers local setup, project conventions, testing, and the pull-request process. Material AI-assisted contributions must also follow the [AI-assisted contribution policy](AI_CONTRIBUTIONS.md).
 
 - Use the repository's structured issue forms for bugs, features, documentation improvements, and questions.
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in every project space.
@@ -173,6 +179,7 @@ Before opening a pull request, run:
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test:coverage
 pnpm build
 ```
 

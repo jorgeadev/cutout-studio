@@ -7,6 +7,8 @@
 
 # Common ignores
 node_modules
+.pnpm-store/
 dist/
+coverage/
 .vite/
 .DS_Store

@@ -1,10 +1,10 @@
 saveExact: true
 autoInstallPeers: false
-overrides:
-  hono: 4.12.25
+minimumReleaseAge: 1440
+minimumReleaseAgeIgnoreMissingTime: false
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade
+trustLockfile: false
+blockExoticSubdeps: true
 allowBuilds:
-  msw: false
   protobufjs: false
-  sharp: false
-minimumReleaseAgeExclude:
-  - shadcn@4.16.0
