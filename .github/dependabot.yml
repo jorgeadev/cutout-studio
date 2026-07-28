@@ -2,18 +2,7 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
     target-branch: develop
-=======
->>>>>>> ece89de (Fix/dependencies error (#6))
-=======
-    target-branch: develop
->>>>>>> f80b59b (Fix/dependencies error (#7))
-=======
-    target-branch: develop
->>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
     schedule:
       interval: weekly
       day: monday
@@ -31,18 +20,7 @@ updates:
       - security
   - package-ecosystem: github-actions
     directory: /
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
     target-branch: develop
-=======
->>>>>>> ece89de (Fix/dependencies error (#6))
-=======
-    target-branch: develop
->>>>>>> f80b59b (Fix/dependencies error (#7))
-=======
-    target-branch: develop
->>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
     schedule:
       interval: weekly
       day: monday

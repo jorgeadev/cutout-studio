@@ -131,13 +131,6 @@ Keep generated output, `dist/`, local environment files, model caches, and edito
 
 When opening a pull request:
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> f80b59b (Fix/dependencies error (#7))
-=======
->>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
 1. Set `develop` as the base branch. Never target `main`.
 2. Complete the pull request template.
 3. Link the relevant issue with `Closes #123` when applicable.
@@ -146,21 +139,6 @@ When opening a pull request:
 6. Disclose material AI assistance and how you verified it.
 7. Disclose privacy, network, storage, bundle-size, or model-download effects.
 8. Respond respectfully to review feedback and update the branch rather than opening replacement pull requests.
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-1. Complete the pull request template.
-2. Link the relevant issue with `Closes #123` when applicable.
-3. Explain the motivation and important design decisions.
-4. List automated and manual testing.
-5. Disclose material AI assistance and how you verified it.
-6. Disclose privacy, network, storage, bundle-size, or model-download effects.
-7. Respond respectfully to review feedback and update the branch rather than opening replacement pull requests.
->>>>>>> ece89de (Fix/dependencies error (#6))
-=======
->>>>>>> f80b59b (Fix/dependencies error (#7))
-=======
->>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
 
 A maintainer may ask for a change to be split, redesigned, documented, or tested before it is merged. Submission does not guarantee acceptance.
 

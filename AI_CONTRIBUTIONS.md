@@ -2,21 +2,8 @@
 
 AI coding tools are welcome as assistants, but they are not authors, reviewers, or a substitute for engineering judgment. The contributor who submits a change is responsible for every line, dependency, asset, test, and claim in it. A human reviewer must be able to understand and validate the final change without relying on the tool that produced it.
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 Every pull request must use `develop` as its base branch. AI tools must never create or recommend a pull request targeting `main`.
 
-=======
->>>>>>> ece89de (Fix/dependencies error (#6))
-=======
-Every pull request must use `develop` as its base branch. AI tools must never create or recommend a pull request targeting `main`.
-
->>>>>>> f80b59b (Fix/dependencies error (#7))
-=======
-Every pull request must use `develop` as its base branch. AI tools must never create or recommend a pull request targeting `main`.
-
->>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
 ## Required disclosure
 
 Disclose material AI assistance in the pull request template. Name the tool when known, summarize what it generated or changed, and explain how you verified the result. Autocomplete of a few tokens does not need a detailed report; generated functions, tests, documentation, dependency choices, workflows, migrations, or substantial rewrites do.

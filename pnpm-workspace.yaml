@@ -1,17 +1,6 @@
 saveExact: true
 autoInstallPeers: false
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 strictPeerDependencies: true
-=======
->>>>>>> ece89de (Fix/dependencies error (#6))
-=======
-strictPeerDependencies: true
->>>>>>> 7fa4dc7 (fix: enhance WebGPU error handling and retry logic for background removal (#8))
-=======
-strictPeerDependencies: true
->>>>>>> e0c3519b3bde3e38da38e17dbae1b018472f1c82
 minimumReleaseAge: 1440
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
