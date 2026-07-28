@@ -3,10 +3,14 @@
 Some protections live in GitHub settings and cannot be enforced by committed files alone. Apply this checklist before merging the security baseline.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> f80b59b (Fix/dependencies error (#7))
 ## Default branch and pull-request base
 
 Set the repository's default branch to `develop`. Every human and automated pull request must target `develop`; never target `main`. This setting is also required because Dependabot security updates target the repository's default branch even when version updates specify `target-branch: develop`.
 
+<<<<<<< HEAD
 ## Branch rulesets
 
 Create a ruleset for `develop` that:
@@ -15,6 +19,11 @@ Create a ruleset for `develop` that:
 
 Create rulesets for `main` and `develop` that:
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+## Branch rulesets
+
+Create a ruleset for `develop` that:
+>>>>>>> f80b59b (Fix/dependencies error (#7))
 
 - Require pull requests and at least one approving review.
 - Require review from CODEOWNERS and dismiss stale approvals after new commits.
@@ -25,10 +34,15 @@ Create rulesets for `main` and `develop` that:
 - Prevent bypass except for a narrowly controlled emergency maintainer role.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 Protect `main` separately as a release branch: block ordinary direct pushes, force pushes, deletion, and contributor bypass. Do not use pull requests into `main`; update it only through the repository's controlled maintainer release process.
 
 =======
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+Protect `main` separately as a release branch: block ordinary direct pushes, force pushes, deletion, and contributor bypass. Do not use pull requests into `main`; update it only through the repository's controlled maintainer release process.
+
+>>>>>>> f80b59b (Fix/dependencies error (#7))
 Keep direct pushes available only through an explicit, auditable emergency process. After the first workflow run, select the exact check names GitHub reports rather than typing approximate names into the ruleset.
 
 ## Actions

@@ -5,10 +5,14 @@ on:
     branches: [main, develop]
   pull_request:
 <<<<<<< HEAD
+<<<<<<< HEAD
     branches: [develop]
 =======
     branches: [main, develop]
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+    branches: [develop]
+>>>>>>> f80b59b (Fix/dependencies error (#7))
 
 permissions:
   contents: read

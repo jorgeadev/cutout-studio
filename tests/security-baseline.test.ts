@@ -75,6 +75,9 @@ describe("repository automation security", () => {
 	});
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> f80b59b (Fix/dependencies error (#7))
 	it("targets every automated pull request at develop", () => {
 		const workflowDirectory = join(repositoryRoot, ".github", "workflows");
 		const workflowFiles = readdirSync(workflowDirectory).filter((fileName) => fileName.endsWith(".yml") || fileName.endsWith(".yaml"));

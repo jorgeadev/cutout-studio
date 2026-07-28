@@ -3,11 +3,17 @@
 <!-- Explain what changed and why. Focus on the user or developer problem being solved. -->
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 > [!IMPORTANT]
 > Set the base branch to `develop`. Pull requests must never target `main`.
 
 =======
 >>>>>>> bf625f9 (feat: add issue and pull request templates, contributing guide, code of conduct, and security policy)
+=======
+> [!IMPORTANT]
+> Set the base branch to `develop`. Pull requests must never target `main`.
+
+>>>>>>> f80b59b (Fix/dependencies error (#7))
 ## Related issue
 
 <!-- Use "Closes #123" when this pull request should close an issue after merging. -->
@@ -73,6 +79,7 @@ Manual checks:
 =======
 ## Contributor checklist
 
+- [ ] This pull request targets `develop`, not `main`.
 - [ ] I kept this pull request focused and reviewed my own changes.
 - [ ] I disclosed material AI assistance and remain accountable for every submitted line, dependency, asset, test, and claim.
 >>>>>>> ece89de (Fix/dependencies error (#6))
