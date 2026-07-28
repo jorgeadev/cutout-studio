@@ -1,5 +1,6 @@
 saveExact: true
 autoInstallPeers: false
+strictPeerDependencies: true
 minimumReleaseAge: 1440
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true

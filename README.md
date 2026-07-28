@@ -60,15 +60,17 @@ The first run for a model takes longer because its assets must be downloaded. Pr
 
 ### Requirements
 
-- Node.js `^20.19.0` or `>=22.12.0`
+- Node.js `>=22.13.0` for local development
 - pnpm `11.17.0` (the version declared by the project)
 - A modern browser with WebAssembly support; a WebGPU-capable browser is recommended for GPU acceleration
+
+The CI matrix still tests application compatibility with Node.js 20.19 by using pnpm's standalone executable; the regular pnpm 11 CLI requires Node.js 22 or newer.
 
 Clone the repository, then run:
 
 ```bash
 cd cutout-studio
-corepack enable
+npm install --global pnpm@11.17.0
 pnpm install --frozen-lockfile
 pnpm dev
 ```
@@ -166,6 +168,8 @@ cutout-studio/
 ## Contributing
 
 Contributions from the community are welcome. Start with the [contributing guide](CONTRIBUTING.md), which covers local setup, project conventions, testing, and the pull-request process. Material AI-assisted contributions must also follow the [AI-assisted contribution policy](AI_CONTRIBUTIONS.md).
+
+All pull requests must target `develop`; never use `main` as the base branch.
 
 - Use the repository's structured issue forms for bugs, features, documentation improvements, and questions.
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in every project space.
