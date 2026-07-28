@@ -8,7 +8,11 @@ on:
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
   pull_request:
+<<<<<<< HEAD
     branches: [develop]
+=======
+    branches: [main, develop]
+>>>>>>> ece89de (Fix/dependencies error (#6))
     paths:
       - package.json
       - pnpm-lock.yaml

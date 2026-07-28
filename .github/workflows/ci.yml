@@ -4,7 +4,11 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+<<<<<<< HEAD
     branches: [develop]
+=======
+    branches: [main, develop]
+>>>>>>> ece89de (Fix/dependencies error (#6))
 
 permissions:
   contents: read

@@ -74,6 +74,7 @@ describe("repository automation security", () => {
 		}
 	});
 
+<<<<<<< HEAD
 	it("targets every automated pull request at develop", () => {
 		const workflowDirectory = join(repositoryRoot, ".github", "workflows");
 		const workflowFiles = readdirSync(workflowDirectory).filter((fileName) => fileName.endsWith(".yml") || fileName.endsWith(".yaml"));
@@ -97,6 +98,10 @@ describe("repository automation security", () => {
 	it("keeps package installation supply-chain policies enabled", () => {
 		const pnpmPolicy = readRepositoryFile("pnpm-workspace.yaml");
 		expect(pnpmPolicy).toMatch(/^strictPeerDependencies:\s*true$/m);
+=======
+	it("keeps package installation supply-chain policies enabled", () => {
+		const pnpmPolicy = readRepositoryFile("pnpm-workspace.yaml");
+>>>>>>> ece89de (Fix/dependencies error (#6))
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAge:\s*1440$/m);
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAgeStrict:\s*true$/m);
 		expect(pnpmPolicy).toMatch(/^minimumReleaseAgeIgnoreMissingTime:\s*false$/m);
@@ -105,6 +110,7 @@ describe("repository automation security", () => {
 		expect(pnpmPolicy).toMatch(/^blockExoticSubdeps:\s*true$/m);
 	});
 
+<<<<<<< HEAD
 	it("keeps ONNX Runtime aligned with the background-removal peer dependency", () => {
 		const applicationPackage = JSON.parse(readRepositoryFile("package.json")) as {
 			dependencies: Record<string, string>;
@@ -116,6 +122,8 @@ describe("repository automation security", () => {
 		expect(applicationPackage.dependencies["onnxruntime-web"]).toBe(backgroundRemovalPackage.peerDependencies["onnxruntime-web"]);
 	});
 
+=======
+>>>>>>> ece89de (Fix/dependencies error (#6))
 	it("requires human accountability and security checks for AI-assisted changes", () => {
 		const policy = readRepositoryFile("AI_CONTRIBUTIONS.md").toLowerCase();
 		const pullRequestTemplate = readRepositoryFile(".github", "PULL_REQUEST_TEMPLATE.md").toLowerCase();

@@ -1,6 +1,9 @@
 saveExact: true
 autoInstallPeers: false
+<<<<<<< HEAD
 strictPeerDependencies: true
+=======
+>>>>>>> ece89de (Fix/dependencies error (#6))
 minimumReleaseAge: 1440
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true

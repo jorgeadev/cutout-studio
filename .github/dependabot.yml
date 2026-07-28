@@ -2,7 +2,10 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+<<<<<<< HEAD
     target-branch: develop
+=======
+>>>>>>> ece89de (Fix/dependencies error (#6))
     schedule:
       interval: weekly
       day: monday
@@ -20,7 +23,10 @@ updates:
       - security
   - package-ecosystem: github-actions
     directory: /
+<<<<<<< HEAD
     target-branch: develop
+=======
+>>>>>>> ece89de (Fix/dependencies error (#6))
     schedule:
       interval: weekly
       day: monday

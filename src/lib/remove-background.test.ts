@@ -94,6 +94,7 @@ describe("model runtime configuration", () => {
 		expect(progress).toHaveBeenCalledWith(0.75, "Downloading model");
 	});
 
+<<<<<<< HEAD
 	it("retries automatic model preloading on CPU when WebGPU cannot initialize", async () => {
 		const progress = vi.fn();
 		backgroundRemovalMocks.preload.mockRejectedValueOnce(new Error("no available backend found. ERR: [webgpu] webgpuInit is not a function")).mockResolvedValueOnce(undefined);
@@ -144,6 +145,8 @@ describe("model runtime configuration", () => {
 		expect(backgroundRemovalMocks.removeBackground).toHaveBeenCalledTimes(1);
 	});
 
+=======
+>>>>>>> ece89de (Fix/dependencies error (#6))
 	it("handles progress events without totals", async () => {
 		const progress = vi.fn();
 		backgroundRemovalMocks.preload.mockImplementation(async (...args: unknown[]) => {
