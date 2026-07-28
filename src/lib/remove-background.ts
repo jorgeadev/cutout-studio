@@ -20,6 +20,15 @@ const runtimeConfig = (options: Pick<RemoveOptions, "model" | "device">) => {
 	};
 };
 
+const isWebGpuBackendError = (error: unknown): boolean => {
+	const message = error instanceof Error ? `${error.message} ${String(error.cause ?? "")}` : String(error);
+	return /webgpu|no available backend/i.test(message);
+};
+
+const shouldRetryWithCpu = (device: ProcessingDevice, error: unknown): boolean => {
+	return device === "auto" && isWebGpuBackendError(error);
+};
+
 const encodePng = async (canvas: HTMLCanvasElement): Promise<Blob> => {
 	return new Promise((resolve, reject) => {
 		canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Could not encode refined cutout"))), "image/png");
@@ -99,13 +108,23 @@ const applyMatteAlgorithm = async (blob: Blob, algorithm: MatteAlgorithm): Promi
 
 export const preloadBackgroundModel = async (options: PreloadOptions): Promise<void> => {
 	const { preload } = await import("@imgly/background-removal");
-	await preload({
-		...runtimeConfig(options),
-		progress: (key: string, current: number, total: number) => {
-			const fraction = total > 0 ? Math.min(1, current / total) : 0;
-			options.onProgress?.(fraction, describe(key));
-		},
-	});
+	const runPreload = async (device: ProcessingDevice): Promise<void> => {
+		await preload({
+			...runtimeConfig({ ...options, device }),
+			progress: (key: string, current: number, total: number) => {
+				const fraction = total > 0 ? Math.min(1, current / total) : 0;
+				options.onProgress?.(fraction, describe(key));
+			},
+		});
+	};
+
+	try {
+		await runPreload(options.device);
+	} catch (error) {
+		if (!shouldRetryWithCpu(options.device, error)) throw error;
+		options.onProgress?.(0, "WebGPU unavailable; retrying with CPU");
+		await runPreload("cpu");
+	}
 };
 
 /**
@@ -114,14 +133,24 @@ export const preloadBackgroundModel = async (options: PreloadOptions): Promise<v
  */
 export const removeImageBackground = async (file: File | Blob, options: RemoveOptions): Promise<Blob> => {
 	const { removeBackground } = await import("@imgly/background-removal");
+	const runRemoval = async (device: ProcessingDevice): Promise<Blob> => {
+		return removeBackground(file, {
+			...runtimeConfig({ ...options, device }),
+			progress: (key: string, current: number, total: number) => {
+				const fraction = total > 0 ? Math.min(0.9, (current / total) * 0.9) : 0;
+				options.onProgress?.(fraction, describe(key));
+			},
+		});
+	};
 
-	const cutout = await removeBackground(file, {
-		...runtimeConfig(options),
-		progress: (key: string, current: number, total: number) => {
-			const fraction = total > 0 ? Math.min(0.9, (current / total) * 0.9) : 0;
-			options.onProgress?.(fraction, describe(key));
-		},
-	});
+	let cutout: Blob;
+	try {
+		cutout = await runRemoval(options.device);
+	} catch (error) {
+		if (!shouldRetryWithCpu(options.device, error)) throw error;
+		options.onProgress?.(0, "WebGPU unavailable; retrying with CPU");
+		cutout = await runRemoval("cpu");
+	}
 
 	options.onProgress?.(0.94, options.algorithm === "natural" ? "Finalizing cutout" : "Refining edges");
 	const refined = await applyMatteAlgorithm(cutout, options.algorithm);
