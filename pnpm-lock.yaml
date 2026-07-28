@@ -69,10 +69,14 @@ importers:
       '@vitejs/plugin-react':
         specifier: 6.0.4
 <<<<<<< HEAD
+<<<<<<< HEAD
         version: 6.0.4(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0))
 =======
         version: 6.0.4(vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0))
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+        version: 6.0.4(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0))
+>>>>>>> e0c3519 (fix: downgrade onnxruntime-web to version 1.21.0)
       '@vitest/coverage-v8':
         specifier: 4.1.10
         version: 4.1.10(vitest@4.1.10)
@@ -88,6 +92,7 @@ importers:
       vite:
         specifier: 8.1.5
 <<<<<<< HEAD
+<<<<<<< HEAD
         version: 8.1.5(@types/node@26.1.2)(jiti@2.7.0)
       vitest:
         specifier: 4.1.10
@@ -98,6 +103,12 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0))
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+        version: 8.1.5(@types/node@26.1.2)(jiti@2.7.0)
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0))
+>>>>>>> e0c3519 (fix: downgrade onnxruntime-web to version 1.21.0)
 
 packages:
 
@@ -500,8 +511,8 @@ packages:
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
-  '@types/node@26.1.1':
-    resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
+  '@types/node@26.1.2':
+    resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
 
   '@types/node@26.1.2':
     resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
@@ -1477,7 +1488,7 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
-  '@types/node@26.1.1':
+  '@types/node@26.1.2':
     dependencies:
       undici-types: 8.3.0
 
@@ -1575,10 +1586,14 @@ snapshots:
       std-env: 4.2.0
       tinyrainbow: 3.1.0
 <<<<<<< HEAD
+<<<<<<< HEAD
       vitest: 4.1.10(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0))
 =======
       vitest: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0))
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+      vitest: 4.1.10(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0))
+>>>>>>> e0c3519 (fix: downgrade onnxruntime-web to version 1.21.0)
 
   '@vitest/expect@4.1.10':
     dependencies:
@@ -1590,20 +1605,28 @@ snapshots:
       tinyrainbow: 3.1.0
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   '@vitest/mocker@4.1.10(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0))':
 =======
   '@vitest/mocker@4.1.10(vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0))':
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+  '@vitest/mocker@4.1.10(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0))':
+>>>>>>> e0c3519 (fix: downgrade onnxruntime-web to version 1.21.0)
     dependencies:
       '@vitest/spy': 4.1.10
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
 <<<<<<< HEAD
+<<<<<<< HEAD
       vite: 8.1.5(@types/node@26.1.2)(jiti@2.7.0)
 =======
       vite: 8.1.5(@types/node@26.1.1)(jiti@2.7.0)
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+      vite: 8.1.5(@types/node@26.1.2)(jiti@2.7.0)
+>>>>>>> e0c3519 (fix: downgrade onnxruntime-web to version 1.21.0)
 
   '@vitest/pretty-format@4.1.10':
     dependencies:
@@ -1972,10 +1995,14 @@ snapshots:
   util-deprecate@1.0.2: {}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0):
 =======
   vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0):
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+  vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0):
+>>>>>>> e0c3519 (fix: downgrade onnxruntime-web to version 1.21.0)
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.5
@@ -1988,6 +2015,7 @@ snapshots:
       jiti: 2.7.0
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   vitest@4.1.10(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0)):
     dependencies:
       '@vitest/expect': 4.1.10
@@ -1998,6 +2026,12 @@ snapshots:
       '@vitest/expect': 4.1.10
       '@vitest/mocker': 4.1.10(vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0))
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+  vitest@4.1.10(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0)):
+    dependencies:
+      '@vitest/expect': 4.1.10
+      '@vitest/mocker': 4.1.10(vite@8.1.5(@types/node@26.1.2)(jiti@2.7.0))
+>>>>>>> e0c3519 (fix: downgrade onnxruntime-web to version 1.21.0)
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
@@ -2015,6 +2049,7 @@ snapshots:
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
 <<<<<<< HEAD
+<<<<<<< HEAD
       vite: 8.1.5(@types/node@26.1.2)(jiti@2.7.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
@@ -2025,6 +2060,12 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.1.1
 >>>>>>> ece89de (Fix/dependencies error (#6))
+=======
+      vite: 8.1.5(@types/node@26.1.2)(jiti@2.7.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 26.1.2
+>>>>>>> e0c3519 (fix: downgrade onnxruntime-web to version 1.21.0)
       '@vitest/coverage-v8': 4.1.10(vitest@4.1.10)
     transitivePeerDependencies:
       - msw
