@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { ALGORITHM_OPTIONS, DEVICE_OPTIONS, MODEL_OPTIONS } from "@/lib/processing-options";
+import { hasWebGpuAdapter } from "@/lib/runtime-capabilities";
 import { cn } from "@/lib/utils";
 import type { ProcessingOptionsProps } from "@/types/processing";
 
@@ -14,7 +15,13 @@ export const ProcessingOptions = ({ value, onChange, downloads, onPrepareModel, 
 	const download = downloads[value.model];
 
 	useEffect(() => {
-		setWebGpuAvailable("gpu" in navigator);
+		let cancelled = false;
+		hasWebGpuAdapter().then((available) => {
+			if (!cancelled) setWebGpuAvailable(available);
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	return (

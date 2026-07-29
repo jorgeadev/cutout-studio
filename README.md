@@ -26,7 +26,9 @@ Most background-removal tools send images to a remote server. cutout-studio down
 - Process as many as 40 images in one queue.
 - Add images with drag and drop, the file picker, clipboard paste, a device camera, or the included sample.
 - Choose between three model sizes to balance download time and cutout quality.
-- Apply natural, refined, soft, or hard alpha-edge treatments.
+- Rerun a difficult image with AI Precision, using the full 32-bit model and Hair Detail sharpening without changing the rest of the queue.
+- Apply natural, refined, hair-detail, soft, or hard alpha-edge treatments.
+- Restore missing subject details or erase leftover background with a full-resolution brush editor, including strength, size, zoom, undo, and reset controls.
 - Select automatic, WebGPU, or CPU processing.
 - Preview results with an interactive before-and-after slider.
 - Keep transparency or add a solid color or two-color gradient.
@@ -47,12 +49,19 @@ Most background-removal tools send images to a remote server. cutout-studio down
 
 The first run for a model takes longer because its assets must be downloaded. Prepared models are cached for later sessions.
 
+For an individual result that needs more detail, choose **AI improve** on its image card. This queues only that image with Max model precision and the Hair Detail algorithm. The image still runs entirely in the browser.
+
+### Manual refinement
+
+Choose **Edit result** on any completed image to open the alpha-mask editor. Use **Restore** to paint pixels from the original photo back into the subject, or **Erase** to make unwanted pixels transparent. Brush strokes remain non-destructive until **Save refinement** is selected, and Undo or Reset can be used without rerunning the AI model.
+
 ### Edge algorithms
 
 | Mode | Behavior |
 | --- | --- |
 | Natural matte | Preserves the model's original transparency values |
 | Edge refine | Tightens semi-transparent edges and reduces pale halos |
+| Hair detail | Applies alpha-aware unsharp masking to strengthen individual hair, fur, and fine semi-transparent edges |
 | Soft detail | Adds light feathering for portraits, hair, and fur |
 | Hard edge | Creates an opaque binary cutout for logos and solid products |
 
@@ -96,8 +105,9 @@ Open the local URL printed by Vite. Use the development server instead of openin
 1. The browser decodes each selected image and queues it for sequential processing to keep lower-powered devices responsive.
 2. `@imgly/background-removal` loads the selected IS-Net model and runs it through ONNX Runtime Web.
 3. The selected matte algorithm adjusts the resulting alpha channel with Canvas APIs.
-4. The cutout is composited onto transparency, a solid color, or a gradient.
-5. Canvas encodes the configured output, and JSZip creates batch archives when requested.
+4. AI Precision can rerun one difficult result with full model precision, while the mask editor can restore or erase local alpha regions by hand.
+5. The cutout is composited onto transparency, a solid color, or a gradient.
+6. Canvas encodes the configured output, and JSZip creates batch archives when requested.
 
 No backend or API key is required.
 

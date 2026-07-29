@@ -1,6 +1,6 @@
 export type ModelQuality = "isnet_quint8" | "isnet_fp16" | "isnet";
 
-export type MatteAlgorithm = "natural" | "refine" | "soft" | "hard";
+export type MatteAlgorithm = "natural" | "refine" | "hair" | "soft" | "hard";
 
 export type ProcessingDevice = "auto" | "gpu" | "cpu";
 
@@ -55,4 +55,12 @@ export interface ProcessingOptionsProps {
 	downloads: Record<ModelQuality, ModelDownloadState>;
 	onPrepareModel: (model: ModelQuality) => void;
 	disabled?: boolean;
+}
+
+export interface WebGpuProvider {
+	requestAdapter: () => Promise<unknown | null>;
+}
+
+export interface WebGpuNavigator {
+	gpu?: WebGpuProvider;
 }

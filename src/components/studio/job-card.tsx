@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, Paintbrush, RotateCcw, Sparkles, Trash2, WandSparkles } from "lucide-react";
 import { CompareSlider } from "@/components/studio/compare-slider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { formatBytes } from "@/lib/image-utils";
 import { ALGORITHM_OPTIONS, MODEL_OPTIONS } from "@/lib/processing-options";
 import type { JobCardProps, StatusBadgeProps } from "@/types/job";
 
-export const JobCard = ({ job, backgroundCss, onDownload, onRetry, onRemove }: JobCardProps) => {
+export const JobCard = ({ job, backgroundCss, onDownload, onEdit, onImprove, onRetry, onRemove }: JobCardProps) => {
 	const model = MODEL_OPTIONS.find((entry) => entry.value === job.processing?.model);
 	const algorithm = ALGORITHM_OPTIONS.find((entry) => entry.value === job.processing?.algorithm);
 
@@ -47,6 +47,16 @@ export const JobCard = ({ job, backgroundCss, onDownload, onRetry, onRemove }: J
 								{job.processing.device}
 							</Badge>
 						) : null}
+						{job.manuallyEdited ? (
+							<Badge variant="outline" className="h-5 border-primary/30 bg-primary/5 px-1.5 text-[9px] font-medium text-primary">
+								Hand refined
+							</Badge>
+						) : null}
+						{job.aiImproved ? (
+							<Badge variant="outline" className="h-5 border-primary/30 bg-primary/5 px-1.5 text-[9px] font-medium text-primary">
+								AI Precision
+							</Badge>
+						) : null}
 					</div>
 				) : null}
 			</CardHeader>
@@ -81,10 +91,20 @@ export const JobCard = ({ job, backgroundCss, onDownload, onRetry, onRemove }: J
 					</Button>
 				) : null}
 				{job.status === "done" ? (
-					<Button variant="outline" size="sm" onClick={() => onRetry(job.id)}>
-						<RotateCcw data-icon="inline-start" aria-hidden="true" />
-						Reprocess
-					</Button>
+					<>
+						<Button variant="outline" size="sm" onClick={() => onImprove(job.id)}>
+							<WandSparkles data-icon="inline-start" aria-hidden="true" />
+							AI improve
+						</Button>
+						<Button variant="outline" size="sm" onClick={() => onEdit(job)}>
+							<Paintbrush data-icon="inline-start" aria-hidden="true" />
+							Edit result
+						</Button>
+						<Button variant="ghost" size="sm" onClick={() => onRetry(job.id)}>
+							<RotateCcw data-icon="inline-start" aria-hidden="true" />
+							Reprocess
+						</Button>
+					</>
 				) : null}
 				<Button size="sm" disabled={job.status !== "done"} onClick={() => onDownload(job)}>
 					<Download data-icon="inline-start" aria-hidden="true" />
