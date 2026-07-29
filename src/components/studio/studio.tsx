@@ -5,6 +5,7 @@ import { BackgroundPicker } from "@/components/studio/background-picker";
 import { ExportOptions } from "@/components/studio/export-options";
 import { JobCard } from "@/components/studio/job-card";
 import { JobQueue } from "@/components/studio/job-queue";
+import { MaskEditor } from "@/components/studio/mask-editor";
 import { ProcessingOptions } from "@/components/studio/processing-options";
 import { ThemeToggle } from "@/components/studio/theme-toggle";
 import { Uploader } from "@/components/studio/uploader";
@@ -16,6 +17,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_BACKGROUND, DEFAULT_EXPORT, DEFAULT_PROCESSING } from "@/lib/defaults";
 import { backgroundToCss, loadImage, outputFileName, renderJob, triggerDownload } from "@/lib/image-utils";
+import { precisionProcessingConfig } from "@/lib/processing-options";
 import { preloadBackgroundModel, removeImageBackground } from "@/lib/remove-background";
 import type { BackgroundConfig } from "@/types/background";
 import type { ExportConfig } from "@/types/export";
@@ -42,6 +44,7 @@ export const Studio = () => {
 	const [processing, setProcessing] = useState<ProcessingConfig>(DEFAULT_PROCESSING);
 	const [modelDownloads, setModelDownloads] = useState<Record<ModelQuality, ModelDownloadState>>(initialDownloads);
 	const [zipping, setZipping] = useState(false);
+	const [editingJobId, setEditingJobId] = useState<string>();
 	const busyRef = useRef(false);
 
 	// Persist only the user's preferences, never their images.
@@ -101,8 +104,9 @@ export const Studio = () => {
 		const startedAt = performance.now();
 		patchJob(next.id, { status: "processing", progress: 0, stage: "Preparing" });
 
-		const settings = { ...processing };
-		patchJob(next.id, { processing: settings });
+		const precisionRequested = Boolean(next.requestedProcessing);
+		const settings = next.requestedProcessing ? { ...next.requestedProcessing } : { ...processing };
+		patchJob(next.id, { processing: settings, requestedProcessing: undefined, manuallyEdited: false });
 
 		removeImageBackground(next.file, {
 			...settings,
@@ -119,6 +123,7 @@ export const Studio = () => {
 					width: img.naturalWidth,
 					height: img.naturalHeight,
 					duration: performance.now() - startedAt,
+					aiImproved: precisionRequested,
 				});
 				setModelDownloads((current) => ({
 					...current,
@@ -175,6 +180,7 @@ export const Studio = () => {
 
 	const backgroundCss = useMemo(() => backgroundToCss(background), [background]);
 	const doneJobs = useMemo(() => jobs.filter((job) => job.status === "done"), [jobs]);
+	const editingJob = useMemo(() => jobs.find((job) => job.id === editingJobId && job.status === "done" && job.cutoutUrl), [editingJobId, jobs]);
 	const pending = jobs.filter((job) => job.status === "queued" || job.status === "processing").length;
 	const failed = jobs.filter((job) => job.status === "error").length;
 	const activelyProcessing = jobs.some((job) => job.status === "processing");
@@ -220,7 +226,56 @@ export const Studio = () => {
 		}
 	}, [background, doneJobs, exportConfig]);
 
+	const handleEdit = useCallback((job: ImageJob) => {
+		setEditingJobId(job.id);
+	}, []);
+
+	const handleSaveRefinement = useCallback((id: string, blob: Blob) => {
+		const cutoutUrl = URL.createObjectURL(blob);
+		setJobs((current) => {
+			if (!current.some((job) => job.id === id)) {
+				URL.revokeObjectURL(cutoutUrl);
+				return current;
+			}
+			return current.map((job) => {
+				if (job.id !== id) return job;
+				if (job.cutoutUrl) URL.revokeObjectURL(job.cutoutUrl);
+				return { ...job, cutoutUrl, manuallyEdited: true };
+			});
+		});
+		setEditingJobId(undefined);
+		toast.success("Manual refinement saved");
+	}, []);
+
+	const handleImprove = useCallback(
+		(id: string) => {
+			setEditingJobId(undefined);
+			setJobs((current) =>
+				current.map((job) => {
+					if (job.id !== id) return job;
+					if (job.cutoutUrl) URL.revokeObjectURL(job.cutoutUrl);
+					return {
+						...job,
+						status: "queued",
+						progress: 0,
+						stage: "Queued for AI Precision",
+						error: undefined,
+						cutoutUrl: undefined,
+						duration: undefined,
+						processing: undefined,
+						manuallyEdited: false,
+						aiImproved: false,
+						requestedProcessing: precisionProcessingConfig(processing.device),
+					};
+				}),
+			);
+			toast.message("AI Precision queued", { description: "Using the full 32-bit model with sharpened hair and fine edges." });
+		},
+		[processing.device],
+	);
+
 	const handleRemove = useCallback((id: string) => {
+		setEditingJobId((current) => (current === id ? undefined : current));
 		setJobs((current) => {
 			const target = current.find((job) => job.id === id);
 			if (target) {
@@ -245,12 +300,16 @@ export const Studio = () => {
 					cutoutUrl: undefined,
 					duration: undefined,
 					processing: undefined,
+					requestedProcessing: undefined,
+					manuallyEdited: false,
+					aiImproved: false,
 				};
 			}),
 		);
 	}, []);
 
 	const handleClearAll = useCallback(() => {
+		setEditingJobId(undefined);
 		setJobs((current) => {
 			for (const job of current) {
 				URL.revokeObjectURL(job.originalUrl);
@@ -304,7 +363,7 @@ export const Studio = () => {
 						<div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-3">
 							{[
 								["3", "AI models"],
-								["4", "edge modes"],
+								["5", "edge modes"],
 								["100%", "on-device"],
 							].map(([value, label]) => (
 								<div key={label} className="min-w-0 rounded-xl border border-border/70 bg-background/70 px-2.5 py-2.5 backdrop-blur sm:min-w-24 sm:px-3">
@@ -426,7 +485,7 @@ export const Studio = () => {
 									</CardHeader>
 									<CardContent>
 										<Separator className="mb-1" />
-										<JobQueue jobs={jobs} onDownload={handleDownload} onRetry={handleRetry} onRemove={handleRemove} />
+										<JobQueue jobs={jobs} onDownload={handleDownload} onEdit={handleEdit} onRetry={handleRetry} onRemove={handleRemove} />
 									</CardContent>
 								</Card>
 
@@ -437,7 +496,16 @@ export const Studio = () => {
 
 								<div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
 									{jobs.map((job) => (
-										<JobCard key={job.id} job={job} backgroundCss={backgroundCss} onDownload={handleDownload} onRetry={handleRetry} onRemove={handleRemove} />
+										<JobCard
+											key={job.id}
+											job={job}
+											backgroundCss={backgroundCss}
+											onDownload={handleDownload}
+											onEdit={handleEdit}
+											onImprove={handleImprove}
+											onRetry={handleRetry}
+											onRemove={handleRemove}
+										/>
 									))}
 								</div>
 							</>
@@ -511,6 +579,8 @@ export const Studio = () => {
 					</div>
 				</div>
 			</footer>
+
+			{editingJob ? <MaskEditor job={editingJob} onClose={() => setEditingJobId(undefined)} onImprove={handleImprove} onSave={handleSaveRefinement} /> : null}
 		</div>
 	);
 };
