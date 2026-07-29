@@ -6,7 +6,12 @@ const backgroundRemovalMocks = vi.hoisted(() => ({
 	removeBackground: vi.fn(),
 }));
 
+const runtimeCapabilityMocks = vi.hoisted(() => ({
+	resolveProcessingDevice: vi.fn(),
+}));
+
 vi.mock("@imgly/background-removal", () => backgroundRemovalMocks);
+vi.mock("@/lib/runtime-capabilities", () => runtimeCapabilityMocks);
 
 const installRefinementEnvironment = (alphaValues: number[]) => {
 	class ImageMock {
@@ -50,6 +55,8 @@ const installRefinementEnvironment = (alphaValues: number[]) => {
 beforeEach(() => {
 	backgroundRemovalMocks.preload.mockReset();
 	backgroundRemovalMocks.removeBackground.mockReset();
+	runtimeCapabilityMocks.resolveProcessingDevice.mockReset();
+	runtimeCapabilityMocks.resolveProcessingDevice.mockImplementation(async (device: string) => (device === "auto" ? "gpu" : device));
 	vi.unstubAllGlobals();
 });
 
@@ -92,6 +99,15 @@ describe("model runtime configuration", () => {
 
 		expect(backgroundRemovalMocks.preload).toHaveBeenCalledWith(expect.objectContaining({ device: "cpu", model: "isnet_quint8", output: { format: "image/png" } }));
 		expect(progress).toHaveBeenCalledWith(0.75, "Downloading model");
+	});
+
+	it("uses CPU directly when automatic capability detection finds no GPU adapter", async () => {
+		const cutout = new Blob(["cutout"], { type: "image/png" });
+		runtimeCapabilityMocks.resolveProcessingDevice.mockResolvedValueOnce("cpu");
+		backgroundRemovalMocks.removeBackground.mockResolvedValue(cutout);
+
+		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "natural", device: "auto", model: "isnet_fp16" })).resolves.toBe(cutout);
+		expect(backgroundRemovalMocks.removeBackground.mock.calls[0]?.[1]).toMatchObject({ device: "cpu" });
 	});
 
 	it("retries automatic model preloading on CPU when WebGPU cannot initialize", async () => {
@@ -184,6 +200,20 @@ describe("matte refinement", () => {
 
 		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "soft", device: "cpu", model: "isnet" })).resolves.toBe(encoded);
 		expect([imageData.data[3], imageData.data[7], imageData.data[11]]).toEqual([38, 179, 38]);
+	});
+
+	it("sharpens isolated semi-transparent hair detail without destroying transparent pixels", async () => {
+		const { imageData } = installRefinementEnvironment([0, 0, 80, 0, 255]);
+		const progress = vi.fn();
+		backgroundRemovalMocks.removeBackground.mockResolvedValue(new Blob(["cutout"]));
+
+		await removeImageBackground(new Blob(["source"]), { algorithm: "hair", device: "cpu", model: "isnet", onProgress: progress });
+
+		expect(imageData.data[3]).toBe(0);
+		expect(imageData.data[11]).toBeGreaterThan(80);
+		expect(imageData.data[15]).toBe(0);
+		expect(imageData.data[19]).toBe(255);
+		expect(progress).toHaveBeenCalledWith(0.94, "Sharpening fine edges");
 	});
 
 	it("revokes temporary URLs when a canvas is unavailable", async () => {

@@ -1,4 +1,5 @@
 import { loadImage } from "@/lib/image-utils";
+import { resolveProcessingDevice } from "@/lib/runtime-capabilities";
 import type { MatteAlgorithm, PreloadOptions, ProcessingDevice, RemoveOptions } from "@/types/processing";
 
 const describe = (key: string): string => {
@@ -7,15 +8,10 @@ const describe = (key: string): string => {
 	return "Working";
 };
 
-const runtimeDevice = (device: ProcessingDevice): "cpu" | "gpu" => {
-	if (device === "auto") return "gpu";
-	return device;
-};
-
-const runtimeConfig = (options: Pick<RemoveOptions, "model" | "device">) => {
+const runtimeConfig = (options: Pick<RemoveOptions, "model">, device: "cpu" | "gpu") => {
 	return {
 		model: options.model,
-		device: runtimeDevice(options.device),
+		device,
 		output: { format: "image/png" as const },
 	};
 };
@@ -71,6 +67,33 @@ const blurAlpha = (rgba: Uint8ClampedArray, width: number, height: number): Uint
 	return result;
 };
 
+const enhanceHairAlpha = (rgba: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray => {
+	const result = new Uint8ClampedArray(width * height);
+	for (let y = 0; y < height; y += 1) {
+		for (let x = 0; x < width; x += 1) {
+			const pixel = y * width + x;
+			const current = rgba[pixel * 4 + 3];
+			if (current === 0 || current === 255) {
+				result[pixel] = current;
+				continue;
+			}
+
+			const left = rgba[(y * width + Math.max(0, x - 1)) * 4 + 3];
+			const right = rgba[(y * width + Math.min(width - 1, x + 1)) * 4 + 3];
+			const above = rgba[(Math.max(0, y - 1) * width + x) * 4 + 3];
+			const below = rgba[(Math.min(height - 1, y + 1) * width + x) * 4 + 3];
+			const average = (current + left + right + above + below) / 5;
+			const unsharp = current + (current - average) * 0.85;
+			const normalized = current / 255;
+			const curved = normalized < 0.5 ? 0.5 * (normalized * 2) ** 1.12 : 1 - 0.5 * ((1 - normalized) * 2) ** 1.12;
+			let enhanced = unsharp * 0.72 + curved * 255 * 0.28;
+			if (current > average) enhanced = Math.max(current, enhanced);
+			result[pixel] = Math.round(Math.max(0, Math.min(255, enhanced)));
+		}
+	}
+	return result;
+};
+
 const applyMatteAlgorithm = async (blob: Blob, algorithm: MatteAlgorithm): Promise<Blob> => {
 	if (algorithm === "natural") return blob;
 
@@ -85,10 +108,15 @@ const applyMatteAlgorithm = async (blob: Blob, algorithm: MatteAlgorithm): Promi
 		context.drawImage(image, 0, 0);
 
 		const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-		const softAlpha = algorithm === "soft" ? blurAlpha(imageData.data, canvas.width, canvas.height) : undefined;
+		const adjustedAlpha =
+			algorithm === "soft"
+				? blurAlpha(imageData.data, canvas.width, canvas.height)
+				: algorithm === "hair"
+					? enhanceHairAlpha(imageData.data, canvas.width, canvas.height)
+					: undefined;
 		const pixelCount = canvas.width * canvas.height;
 		for (let pixel = 0; pixel < pixelCount; pixel += 1) {
-			const current = softAlpha?.[pixel] ?? imageData.data[pixel * 4 + 3];
+			const current = adjustedAlpha?.[pixel] ?? imageData.data[pixel * 4 + 3];
 			if (algorithm === "hard") {
 				imageData.data[pixel * 4 + 3] = current >= 128 ? 255 : 0;
 			} else if (algorithm === "refine") {
@@ -109,8 +137,9 @@ const applyMatteAlgorithm = async (blob: Blob, algorithm: MatteAlgorithm): Promi
 export const preloadBackgroundModel = async (options: PreloadOptions): Promise<void> => {
 	const { preload } = await import("@imgly/background-removal");
 	const runPreload = async (device: ProcessingDevice): Promise<void> => {
+		const resolvedDevice = await resolveProcessingDevice(device);
 		await preload({
-			...runtimeConfig({ ...options, device }),
+			...runtimeConfig(options, resolvedDevice),
 			progress: (key: string, current: number, total: number) => {
 				const fraction = total > 0 ? Math.min(1, current / total) : 0;
 				options.onProgress?.(fraction, describe(key));
@@ -134,8 +163,9 @@ export const preloadBackgroundModel = async (options: PreloadOptions): Promise<v
 export const removeImageBackground = async (file: File | Blob, options: RemoveOptions): Promise<Blob> => {
 	const { removeBackground } = await import("@imgly/background-removal");
 	const runRemoval = async (device: ProcessingDevice): Promise<Blob> => {
+		const resolvedDevice = await resolveProcessingDevice(device);
 		return removeBackground(file, {
-			...runtimeConfig({ ...options, device }),
+			...runtimeConfig(options, resolvedDevice),
 			progress: (key: string, current: number, total: number) => {
 				const fraction = total > 0 ? Math.min(0.9, (current / total) * 0.9) : 0;
 				options.onProgress?.(fraction, describe(key));
@@ -152,7 +182,7 @@ export const removeImageBackground = async (file: File | Blob, options: RemoveOp
 		cutout = await runRemoval("cpu");
 	}
 
-	options.onProgress?.(0.94, options.algorithm === "natural" ? "Finalizing cutout" : "Refining edges");
+	options.onProgress?.(0.94, options.algorithm === "natural" ? "Finalizing cutout" : options.algorithm === "hair" ? "Sharpening fine edges" : "Refining edges");
 	const refined = await applyMatteAlgorithm(cutout, options.algorithm);
 	options.onProgress?.(1, "Done");
 	return refined;

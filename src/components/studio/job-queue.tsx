@@ -1,11 +1,11 @@
-import { Download, RotateCcw, X } from "lucide-react";
+import { Download, Paintbrush, RotateCcw, X } from "lucide-react";
 import { StatusBadge } from "@/components/studio/job-card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/image-utils";
 import type { JobQueueProps } from "@/types/job";
 
-export const JobQueue = ({ jobs, onDownload, onRetry, onRemove }: JobQueueProps) => {
+export const JobQueue = ({ jobs, onDownload, onEdit, onRetry, onRemove }: JobQueueProps) => {
 	return (
 		<ul className="flex max-h-104 flex-col divide-y divide-border overflow-y-auto pr-1">
 			{jobs.map((job) => (
@@ -33,6 +33,11 @@ export const JobQueue = ({ jobs, onDownload, onRetry, onRemove }: JobQueueProps)
 					<StatusBadge job={job} />
 
 					<div className="flex items-center gap-0.5">
+						{job.status === "done" ? (
+							<Button variant="ghost" size="icon-sm" aria-label={`Edit result for ${job.name}`} onClick={() => onEdit(job)}>
+								<Paintbrush aria-hidden="true" />
+							</Button>
+						) : null}
 						{job.status === "error" || job.status === "done" ? (
 							<Button variant="ghost" size="icon-sm" aria-label={`${job.status === "done" ? "Reprocess" : "Retry"} ${job.name}`} onClick={() => onRetry(job.id)}>
 								<RotateCcw aria-hidden="true" />

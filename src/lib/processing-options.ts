@@ -1,4 +1,8 @@
-import type { AlgorithmOption, DeviceOption, ModelOption } from "@/types/processing";
+import type { AlgorithmOption, DeviceOption, ModelOption, ProcessingConfig, ProcessingDevice } from "@/types/processing";
+
+export const precisionProcessingConfig = (device: ProcessingDevice): ProcessingConfig => {
+	return { model: "isnet", algorithm: "hair", device };
+};
 
 export const MODEL_OPTIONS: ModelOption[] = [
 	{
@@ -35,6 +39,11 @@ export const ALGORITHM_OPTIONS: AlgorithmOption[] = [
 		value: "refine",
 		name: "Edge refine",
 		description: "Tightens semi-transparent edges and reduces pale halos.",
+	},
+	{
+		value: "hair",
+		name: "Hair detail",
+		description: "Sharpens wispy hair, fur, and other fine semi-transparent edges.",
 	},
 	{
 		value: "soft",

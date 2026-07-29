@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROCESSING } from "@/lib/defaults";
-import { ALGORITHM_OPTIONS, DEVICE_OPTIONS, MODEL_OPTIONS } from "@/lib/processing-options";
+import { ALGORITHM_OPTIONS, DEVICE_OPTIONS, MODEL_OPTIONS, precisionProcessingConfig } from "@/lib/processing-options";
 
 describe("processing options", () => {
 	it("keeps option identifiers unique and defaults selectable", () => {
@@ -24,5 +24,10 @@ describe("processing options", () => {
 			expect(option.precision).toMatch(/bit$/);
 			expect(option.size).toMatch(/^~\d+ MB$/);
 		}
+	});
+
+	it("builds the per-image AI Precision configuration with the selected processor", () => {
+		expect(precisionProcessingConfig("auto")).toEqual({ model: "isnet", algorithm: "hair", device: "auto" });
+		expect(precisionProcessingConfig("cpu").device).toBe("cpu");
 	});
 });
