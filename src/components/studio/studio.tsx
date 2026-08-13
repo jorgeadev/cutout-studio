@@ -25,9 +25,20 @@ import type { ImageJob } from "@/types/job";
 import type { ModelDownloadState, ModelQuality, ProcessingConfig } from "@/types/processing";
 
 const MAX_FILES = 40;
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000;
+const WATCHDOG_INTERVAL_MS = 15 * 1000;
 const SETTINGS_KEY = "cutout-studio-settings";
 const LEGACY_SETTINGS_KEY = "cutout-settings";
 const EMPTY_DOWNLOAD: ModelDownloadState = { status: "idle", progress: 0 };
+
+const safeObjectUrl = (blob: Blob): string | undefined => {
+	try {
+		return URL.createObjectURL(blob);
+	} catch {
+		return undefined;
+	}
+};
 
 const initialDownloads = (): Record<ModelQuality, ModelDownloadState> => {
 	return {
@@ -46,6 +57,7 @@ export const Studio = () => {
 	const [zipping, setZipping] = useState(false);
 	const [editingJobId, setEditingJobId] = useState<string>();
 	const busyRef = useRef(false);
+	const progressStampRef = useRef<{ id: string; updatedAt: number } | undefined>(undefined);
 
 	// Persist only the user's preferences, never their images.
 	useEffect(() => {
@@ -63,7 +75,12 @@ export const Studio = () => {
 	}, []);
 
 	useEffect(() => {
-		window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ background, exportConfig, processing }));
+		try {
+			window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ background, exportConfig, processing }));
+		} catch {
+			// Storage can be unavailable (e.g. private browsing); preferences
+			// are optional and must never take the app down with them.
+		}
 	}, [background, exportConfig, processing]);
 
 	const patchJob = useCallback((id: string, patch: Partial<ImageJob>) => {
@@ -77,19 +94,31 @@ export const Studio = () => {
 				toast.error(`You can queue up to ${MAX_FILES} images at once.`);
 				return current;
 			}
-			const accepted = files.slice(0, room);
-			if (accepted.length < files.length) {
+			const withinSizeLimit = files.filter((file) => file.size <= MAX_FILE_BYTES);
+			const skippedOversized = withinSizeLimit.length < files.length;
+			const accepted = withinSizeLimit.slice(0, room);
+			if (skippedOversized) {
+				toast.warning("Some images were too large to process on this device and were skipped.");
+			} else if (accepted.length < files.length) {
 				toast.warning(`Only the first ${accepted.length} image(s) were added.`);
 			}
-			const next: ImageJob[] = accepted.map((file) => ({
-				id: `${file.name}-${file.size}-${crypto.randomUUID()}`,
-				file,
-				name: file.name || "pasted-image.png",
-				size: file.size,
-				originalUrl: URL.createObjectURL(file),
-				status: "queued",
-				progress: 0,
-			}));
+			const next: ImageJob[] = [];
+			for (const file of accepted) {
+				const originalUrl = safeObjectUrl(file);
+				if (!originalUrl) {
+					toast.error(`Could not load ${file.name || "image"} because the device ran out of memory.`);
+					continue;
+				}
+				next.push({
+					id: `${file.name}-${file.size}-${crypto.randomUUID()}`,
+					file,
+					name: file.name || "pasted-image.png",
+					size: file.size,
+					originalUrl,
+					status: "queued",
+					progress: 0,
+				});
+			}
 			return [...current, ...next];
 		});
 	}, []);
@@ -102,6 +131,7 @@ export const Studio = () => {
 
 		busyRef.current = true;
 		const startedAt = performance.now();
+		progressStampRef.current = { id: next.id, updatedAt: startedAt };
 		patchJob(next.id, { status: "processing", progress: 0, stage: "Preparing" });
 
 		const precisionRequested = Boolean(next.requestedProcessing);
@@ -110,7 +140,10 @@ export const Studio = () => {
 
 		removeImageBackground(next.file, {
 			...settings,
-			onProgress: (fraction, stage) => patchJob(next.id, { progress: fraction, stage }),
+			onProgress: (fraction, stage) => {
+				progressStampRef.current = { id: next.id, updatedAt: performance.now() };
+				patchJob(next.id, { progress: fraction, stage });
+			},
 		})
 			.then(async (blob) => {
 				const cutoutUrl = URL.createObjectURL(blob);
@@ -139,10 +172,30 @@ export const Studio = () => {
 			})
 			.finally(() => {
 				busyRef.current = false;
+				progressStampRef.current = undefined;
 				// Nudge the effect so the next queued job starts.
 				setJobs((current) => [...current]);
 			});
 	}, [jobs, patchJob, processing]);
+
+	// Watchdog: if a job stops reporting progress (hung worker or wedged
+	// WebGPU context), fail it explicitly instead of spinning forever.
+	useEffect(() => {
+		const timer = window.setInterval(() => {
+			const stamp = progressStampRef.current;
+			if (!stamp) return;
+			const active = jobs.find((job) => job.id === stamp.id && job.status === "processing");
+			if (!active || performance.now() - stamp.updatedAt <= STALE_JOB_TIMEOUT_MS) return;
+			progressStampRef.current = undefined;
+			busyRef.current = false;
+			patchJob(stamp.id, {
+				status: "error",
+				error: "Processing stalled on this device. Tap Retry, or switch the processor to CPU in AI processing.",
+			});
+			toast.error(`Processing of ${active.name} stalled`);
+		}, WATCHDOG_INTERVAL_MS);
+		return () => window.clearInterval(timer);
+	}, [jobs, patchJob]);
 
 	const handlePrepareModel = useCallback(
 		async (model: ModelQuality) => {
@@ -231,7 +284,11 @@ export const Studio = () => {
 	}, []);
 
 	const handleSaveRefinement = useCallback((id: string, blob: Blob) => {
-		const cutoutUrl = URL.createObjectURL(blob);
+		const cutoutUrl = safeObjectUrl(blob);
+		if (!cutoutUrl) {
+			toast.error("Could not save the refinement because the device ran out of memory.");
+			return;
+		}
 		setJobs((current) => {
 			if (!current.some((job) => job.id === id)) {
 				URL.revokeObjectURL(cutoutUrl);

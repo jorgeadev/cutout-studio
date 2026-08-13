@@ -31,12 +31,16 @@
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
 		<title>Cutout Studio | Batch Background Remover</title>
 		<script>
-			const themeKey = "cutout-studio-theme";
-			const theme = localStorage.getItem(themeKey) ?? localStorage.getItem("cutout-theme");
-			if (theme && !localStorage.getItem(themeKey)) localStorage.setItem(themeKey, theme);
-			const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
-			document.documentElement.classList.toggle("dark", dark);
-			document.documentElement.classList.toggle("light", !dark);
+			try {
+				const themeKey = "cutout-studio-theme";
+				const theme = localStorage.getItem(themeKey) ?? localStorage.getItem("cutout-theme");
+				if (theme && !localStorage.getItem(themeKey)) localStorage.setItem(themeKey, theme);
+				const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+				document.documentElement.classList.toggle("dark", dark);
+				document.documentElement.classList.toggle("light", !dark);
+			} catch {
+				// Storage can be unavailable in private or restricted contexts.
+			}
 		</script>
 	</head>
 	<body class="font-sans antialiased">

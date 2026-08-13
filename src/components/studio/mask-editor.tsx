@@ -2,7 +2,7 @@ import { Eraser, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, WandSparkles,
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { loadImage } from "@/lib/image-utils";
+import { loadImage, MAX_CANVAS_SIDE } from "@/lib/image-utils";
 import { canvasPointFromClient, drawEditorStroke, encodeCanvasPng } from "@/lib/mask-editor";
 import { cn } from "@/lib/utils";
 import type { EditorStroke, MaskEditorProps, MaskEditorTool } from "@/types/editor";
@@ -46,8 +46,11 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			const canvas = canvasRef.current;
 			const context = canvas?.getContext("2d");
 			if (!canvas || !context) throw new Error("Canvas editing is not available in this browser");
-			canvas.width = originalImage.naturalWidth;
-			canvas.height = originalImage.naturalHeight;
+			// A 48 MP source would allocate hundreds of MB and crash mobile
+			// browsers; cap the editable canvas at a safe resolution instead.
+			const editScale = Math.min(1, MAX_CANVAS_SIDE / Math.max(originalImage.naturalWidth, originalImage.naturalHeight));
+			canvas.width = Math.max(1, Math.round(originalImage.naturalWidth * editScale));
+			canvas.height = Math.max(1, Math.round(originalImage.naturalHeight * editScale));
 			originalImageRef.current = originalImage;
 			cutoutImageRef.current = cutoutImage;
 			context.drawImage(cutoutImage, 0, 0, canvas.width, canvas.height);
