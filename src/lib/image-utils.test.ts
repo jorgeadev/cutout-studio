@@ -112,6 +112,22 @@ describe("image loading and rendering", () => {
 		await expect(loadImage("blob:invalid")).rejects.toThrow("Could not decode image");
 	});
 
+	it("times out instead of hanging forever on images that never decode", async () => {
+		vi.useFakeTimers();
+		class StuckImageMock {
+			crossOrigin: string | null = null;
+			set src(_value: string) {
+				// Never fires onload or onerror.
+			}
+		}
+		vi.stubGlobal("Image", StuckImageMock);
+
+		const pending = loadImage("blob:stuck");
+		const assertion = expect(pending).rejects.toThrow("Timed out decoding image");
+		await vi.advanceTimersByTimeAsync(60_001);
+		await assertion;
+	});
+
 	it("rejects rendering before a cutout exists", async () => {
 		await expect(renderJob({} as ImageJob, { kind: "transparent", color: "#000", color2: "#fff", angle: 0 }, createExport())).rejects.toThrow(
 			"Image has not been processed yet",
@@ -160,6 +176,37 @@ describe("image loading and rendering", () => {
 		const { canvas } = createCanvasHarness();
 		canvas.toBlob.mockImplementation((callback: BlobCallback) => callback(null));
 		await expect(renderJob(createJob(), { kind: "transparent", color: "#000", color2: "#fff", angle: 0 }, createExport())).rejects.toThrow("Encoding failed");
+	});
+
+	it("falls back to a safe canvas size when the device cannot allocate a huge export", async () => {
+		installImageMock(false, 6000, 4000);
+		const context = {
+			createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+			drawImage: vi.fn(),
+			fillRect: vi.fn(),
+			fillStyle: "",
+			imageSmoothingQuality: "low",
+		};
+		const goodCanvas = {
+			getContext: vi.fn(() => context),
+			height: 0,
+			toBlob: vi.fn((callback: BlobCallback) => callback(new Blob(["exported"], { type: "image/png" }))),
+			width: 0,
+		};
+		const failingCanvas = { getContext: () => null };
+		let created = 0;
+		vi.stubGlobal("document", {
+			createElement: vi.fn(() => {
+				created += 1;
+				return created === 1 ? failingCanvas : goodCanvas;
+			}),
+		});
+
+		const blob = await renderJob(createJob(), { kind: "transparent", color: "#000", color2: "#fff", angle: 0 }, createExport());
+
+		expect(blob).toBeInstanceOf(Blob);
+		expect(goodCanvas.width).toBe(4096);
+		expect(goodCanvas.height).toBe(Math.round(4000 * (4096 / 6000)));
 	});
 });
 

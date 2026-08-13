@@ -1,4 +1,4 @@
-import { loadImage } from "@/lib/image-utils";
+import { loadImage, MAX_CANVAS_SIDE } from "@/lib/image-utils";
 import { resolveProcessingDevice } from "@/lib/runtime-capabilities";
 import type { MatteAlgorithm, PreloadOptions, ProcessingDevice, RemoveOptions } from "@/types/processing";
 
@@ -100,21 +100,31 @@ const applyMatteAlgorithm = async (blob: Blob, algorithm: MatteAlgorithm): Promi
 	const url = URL.createObjectURL(blob);
 	try {
 		const image = await loadImage(url);
+		const naturalWidth = image.naturalWidth;
+		const naturalHeight = image.naturalHeight;
+
+		// Work at a resolution the device can safely hold in memory. A large
+		// photo would otherwise allocate hundreds of MB of ImageData and can
+		// crash the tab; the refined result is upscaled back to full size.
+		const refinementScale = Math.min(1, MAX_CANVAS_SIDE / Math.max(naturalWidth, naturalHeight));
+		const width = Math.max(1, Math.round(naturalWidth * refinementScale));
+		const height = Math.max(1, Math.round(naturalHeight * refinementScale));
+
 		const canvas = document.createElement("canvas");
-		canvas.width = image.naturalWidth;
-		canvas.height = image.naturalHeight;
+		canvas.width = width;
+		canvas.height = height;
 		const context = canvas.getContext("2d", { willReadFrequently: true });
 		if (!context) throw new Error("Canvas is not available");
-		context.drawImage(image, 0, 0);
+		context.drawImage(image, 0, 0, width, height);
 
-		const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+		const imageData = context.getImageData(0, 0, width, height);
 		const adjustedAlpha =
 			algorithm === "soft"
-				? blurAlpha(imageData.data, canvas.width, canvas.height)
+				? blurAlpha(imageData.data, width, height)
 				: algorithm === "hair"
-					? enhanceHairAlpha(imageData.data, canvas.width, canvas.height)
+					? enhanceHairAlpha(imageData.data, width, height)
 					: undefined;
-		const pixelCount = canvas.width * canvas.height;
+		const pixelCount = width * height;
 		for (let pixel = 0; pixel < pixelCount; pixel += 1) {
 			const current = adjustedAlpha?.[pixel] ?? imageData.data[pixel * 4 + 3];
 			if (algorithm === "hard") {
@@ -128,7 +138,16 @@ const applyMatteAlgorithm = async (blob: Blob, algorithm: MatteAlgorithm): Promi
 		}
 
 		context.putImageData(imageData, 0, 0);
-		return encodePng(canvas);
+		if (refinementScale === 1) return encodePng(canvas);
+
+		const outputCanvas = document.createElement("canvas");
+		outputCanvas.width = naturalWidth;
+		outputCanvas.height = naturalHeight;
+		const outputContext = outputCanvas.getContext("2d");
+		if (!outputContext) throw new Error("Canvas is not available");
+		outputContext.imageSmoothingQuality = "high";
+		outputContext.drawImage(canvas, 0, 0, naturalWidth, naturalHeight);
+		return encodePng(outputCanvas);
 	} finally {
 		URL.revokeObjectURL(url);
 	}

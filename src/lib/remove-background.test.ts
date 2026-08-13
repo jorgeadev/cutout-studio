@@ -36,20 +36,25 @@ const installRefinementEnvironment = (alphaValues: number[]) => {
 		putImageData: vi.fn(),
 	};
 	const encoded = new Blob(["refined"], { type: "image/png" });
-	const canvas = {
-		getContext: vi.fn(() => context),
-		height: 0,
-		toBlob: vi.fn((callback: BlobCallback) => callback(encoded)),
-		width: 0,
+	const canvases: Array<{ getContext: ReturnType<typeof vi.fn>; height: number; toBlob: ReturnType<typeof vi.fn>; width: number }> = [];
+	const createCanvas = () => {
+		const canvas = {
+			getContext: vi.fn(() => context),
+			height: 0,
+			toBlob: vi.fn((callback: BlobCallback) => callback(encoded)),
+			width: 0,
+		};
+		canvases.push(canvas);
+		return canvas;
 	};
 	const createObjectURL = vi.fn(() => "blob:temporary-cutout");
 	const revokeObjectURL = vi.fn();
 
 	vi.stubGlobal("Image", ImageMock);
-	vi.stubGlobal("document", { createElement: vi.fn(() => canvas) });
+	vi.stubGlobal("document", { createElement: vi.fn(createCanvas) });
 	vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
 
-	return { context, encoded, imageData, revokeObjectURL };
+	return { canvases, context, encoded, imageData, revokeObjectURL };
 };
 
 beforeEach(() => {
@@ -223,5 +228,18 @@ describe("matte refinement", () => {
 
 		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "refine", device: "cpu", model: "isnet" })).rejects.toThrow("Canvas is not available");
 		expect(revokeObjectURL).toHaveBeenCalledWith("blob:temporary-cutout");
+	});
+
+	it("refines oversized cutouts at a capped resolution instead of crashing the tab", async () => {
+		const { canvases, context, encoded } = installRefinementEnvironment(Array.from({ length: 5000 }, () => 0));
+		backgroundRemovalMocks.removeBackground.mockResolvedValue(new Blob(["cutout"]));
+
+		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "hard", device: "cpu", model: "isnet_quint8" })).resolves.toBe(encoded);
+
+		expect(canvases[0]?.width).toBe(4096);
+		expect(canvases[0]?.height).toBe(1);
+		expect(canvases[1]?.width).toBe(5000);
+		expect(context.drawImage).toHaveBeenCalledTimes(2);
+		expect(context.drawImage).toHaveBeenLastCalledWith(canvases[0], 0, 0, 5000, 1);
 	});
 });

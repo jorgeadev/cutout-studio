@@ -2,6 +2,13 @@ import type { BackgroundConfig } from "@/types/background";
 import type { ExportConfig, OutputFormat } from "@/types/export";
 import type { ImageJob } from "@/types/job";
 
+/**
+ * Largest canvas side that is safe to allocate on all mobile browsers.
+ * Exceeding this (e.g. a 48 MP photo) can crash the tab in Safari/Chrome.
+ */
+export const MAX_CANVAS_SIDE = 4096;
+const LOAD_IMAGE_TIMEOUT_MS = 60_000;
+
 /** CSS value for the chosen background, or null when transparent. */
 export const backgroundToCss = (bg: BackgroundConfig): string | null => {
 	if (bg.kind === "transparent") return null;
@@ -52,13 +59,19 @@ export const outputFileName = (name: string, format: OutputFormat): string => {
 	return `${base}-nobg.${extensionFor(format)}`;
 };
 
-export const loadImage = (src: string): Promise<HTMLImageElement> => {
+export const loadImage = (src: string, timeoutMs = LOAD_IMAGE_TIMEOUT_MS): Promise<HTMLImageElement> => {
 	return new Promise((resolve, reject) => {
 		const img = new Image();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const settle = (action: () => void) => () => {
+			if (timer) clearTimeout(timer);
+			action();
+		};
 		img.crossOrigin = "anonymous";
-		img.onload = () => resolve(img);
-		img.onerror = () => reject(new Error("Could not decode image"));
+		img.onload = settle(() => resolve(img));
+		img.onerror = settle(() => reject(new Error("Could not decode image")));
 		img.src = src;
+		timer = setTimeout(settle(() => reject(new Error("Timed out decoding image"))), timeoutMs);
 	});
 };
 
@@ -81,33 +94,59 @@ const paintGradient = (ctx: CanvasRenderingContext2D, bg: BackgroundConfig, w: n
 export const renderJob = async (job: ImageJob, bg: BackgroundConfig, exp: ExportConfig): Promise<Blob> => {
 	if (!job.cutoutUrl) throw new Error("Image has not been processed yet");
 	const img = await loadImage(job.cutoutUrl);
-	const w = Math.max(1, Math.round(img.naturalWidth * exp.scale));
-	const h = Math.max(1, Math.round(img.naturalHeight * exp.scale));
+	const requestedWidth = Math.max(1, Math.round(img.naturalWidth * exp.scale));
+	const requestedHeight = Math.max(1, Math.round(img.naturalHeight * exp.scale));
 
-	const canvas = document.createElement("canvas");
-	canvas.width = w;
-	canvas.height = h;
-	const ctx = canvas.getContext("2d");
-	if (!ctx) throw new Error("Canvas is not available");
-	ctx.imageSmoothingQuality = "high";
+	const render = (width: number, height: number): Promise<Blob> => {
+		return new Promise((resolve, reject) => {
+			try {
+				const canvas = document.createElement("canvas");
+				canvas.width = width;
+				canvas.height = height;
+				const ctx = canvas.getContext("2d");
+				if (!ctx) {
+					reject(new Error("Canvas is not available"));
+					return;
+				}
+				ctx.imageSmoothingQuality = "high";
 
-	const opaqueFormat = exp.format !== "image/png";
-	if (bg.kind === "solid") {
-		ctx.fillStyle = bg.color;
-		ctx.fillRect(0, 0, w, h);
-	} else if (bg.kind === "gradient") {
-		paintGradient(ctx, bg, w, h);
-	} else if (opaqueFormat) {
-		// JPEG has no alpha channel, fall back to white so it is not black.
-		ctx.fillStyle = "#ffffff";
-		ctx.fillRect(0, 0, w, h);
+				const opaqueFormat = exp.format !== "image/png";
+				if (bg.kind === "solid") {
+					ctx.fillStyle = bg.color;
+					ctx.fillRect(0, 0, width, height);
+				} else if (bg.kind === "gradient") {
+					paintGradient(ctx, bg, width, height);
+				} else if (opaqueFormat) {
+					// JPEG has no alpha channel, fall back to white so it is not black.
+					ctx.fillStyle = "#ffffff";
+					ctx.fillRect(0, 0, width, height);
+				}
+
+				ctx.drawImage(img, 0, 0, width, height);
+
+				canvas.toBlob(
+					(blob) => (blob ? resolve(blob) : reject(new Error("Encoding failed"))),
+					exp.format,
+					exp.format === "image/png" ? undefined : exp.quality,
+				);
+			} catch {
+				reject(new Error("Encoding failed"));
+			}
+		});
+	};
+
+	try {
+		return await render(requestedWidth, requestedHeight);
+	} catch (error) {
+		// Some devices cannot allocate canvases above MAX_CANVAS_SIDE; render at
+		// a safe size instead of crashing the tab.
+		const largestSide = Math.max(requestedWidth, requestedHeight);
+		if (largestSide <= MAX_CANVAS_SIDE) throw error;
+		const cappedScale = MAX_CANVAS_SIDE / largestSide;
+		const cappedWidth = Math.max(1, Math.round(requestedWidth * cappedScale));
+		const cappedHeight = Math.max(1, Math.round(requestedHeight * cappedScale));
+		return render(cappedWidth, cappedHeight);
 	}
-
-	ctx.drawImage(img, 0, 0, w, h);
-
-	return new Promise<Blob>((resolve, reject) => {
-		canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Encoding failed"))), exp.format, exp.format === "image/png" ? undefined : exp.quality);
-	});
 };
 
 export const triggerDownload = (blob: Blob, fileName: string) => {
