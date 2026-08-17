@@ -1,8 +1,8 @@
-import { ArrowLeft, Eraser, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Eraser, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ThemeToggle } from "@/components/studio/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/studio/theme-toggle";
 import { loadImage, MAX_CANVAS_SIDE } from "@/lib/image-utils";
 import {
 	brushPreviewFromClient,
@@ -11,8 +11,10 @@ import {
 	drawEditorStroke,
 	editorZoomFromWheel,
 	encodeCanvasPng,
+	fitEditorZoom,
 	MAX_EDITOR_ZOOM,
 	MIN_EDITOR_ZOOM,
+	oppositeEditorTool,
 } from "@/lib/mask-editor";
 import { cn } from "@/lib/utils";
 import type { EditorStroke, MaskEditorProps, MaskEditorTool } from "@/types/editor";
@@ -184,6 +186,13 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 		setZoom(nextZoom);
 	}, []);
 
+	const fitCanvasToViewport = useCallback(() => {
+		const viewport = viewportRef.current;
+		const canvas = canvasRef.current;
+		if (!viewport || !canvas || loading || error) return;
+		setEditorZoom(fitEditorZoom(viewport.clientWidth, viewport.clientHeight, canvas.width, canvas.height));
+	}, [error, loading, setEditorZoom]);
+
 	useLayoutEffect(() => {
 		const anchor = pendingZoomAnchorRef.current;
 		const viewport = viewportRef.current;
@@ -226,7 +235,8 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 
 			event.preventDefault();
 			canvas.setPointerCapture(event.pointerId);
-			const stroke: EditorStroke = { tool, size: brushSize, strength: strength / 100, points: [point] };
+			const strokeTool = event.altKey ? oppositeEditorTool(tool) : tool;
+			const stroke: EditorStroke = { tool: strokeTool, size: brushSize, strength: strength / 100, points: [point] };
 			activeStrokeRef.current = stroke;
 			drawEditorStroke(context, stroke, originalImage);
 		},
@@ -305,12 +315,12 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			<div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[17rem_minmax(0,1fr)] lg:overflow-hidden">
 				<aside className="order-2 flex flex-col gap-5 border-t border-border bg-card p-4 lg:order-1 lg:min-h-0 lg:overflow-y-auto lg:border-r lg:border-t-0">
 					<div>
-						<p className="mb-2 text-xs font-semibold">Brush mode</p>
+						<p className="mb-2 text-xs font-semibold">Brush action</p>
 						<div className="grid grid-cols-2 gap-2">
 							{(
 								[
-									{ value: "restore", label: "Restore", icon: Paintbrush },
-									{ value: "erase", label: "Erase", icon: Eraser },
+									{ value: "restore", label: "Restore pixels", icon: Paintbrush },
+									{ value: "erase", label: "Make transparent", icon: Eraser },
 								] as const
 							).map(({ value, label, icon: Icon }) => (
 								<button
@@ -329,8 +339,13 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 							))}
 						</div>
 						<p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-							{tool === "restore" ? "Restore paints pixels from the original photo back into the subject." : "Erase makes unwanted pixels transparent."}
+							{tool === "restore" ? "Paint pixels from the original photo back into the cutout." : "Remove pixels from the cutout to create transparent space."}
 						</p>
+						<Button type="button" variant="outline" size="sm" className="mt-3 w-full" onClick={() => setTool((current) => oppositeEditorTool(current))}>
+							<ArrowLeftRight data-icon="inline-start" aria-hidden="true" />
+							Switch to {tool === "restore" ? "transparent" : "restore"}
+						</Button>
+						<p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Tip: hold Alt while painting to temporarily use the opposite action.</p>
 					</div>
 
 					<label className="grid gap-2 text-xs font-medium">
@@ -424,8 +439,14 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 					</div>
 
 					<div className="flex flex-wrap items-center gap-2 border-t border-border bg-card px-3 py-2.5 sm:px-4">
-						<div className="flex items-center gap-1">
-							<Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom out" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => setEditorZoom(zoomRef.current - 25)}>
+						<div className="flex flex-wrap items-center gap-1">
+							<Button type="button" variant="outline" size="sm" disabled={loading || Boolean(error)} onClick={fitCanvasToViewport}>
+								Fit
+							</Button>
+							<Button type="button" variant="outline" size="sm" disabled={loading || Boolean(error)} onClick={() => setEditorZoom(100)}>
+								100%
+							</Button>
+							<Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom out" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => setEditorZoom(zoomRef.current - 10)}>
 								<ZoomOut aria-hidden="true" />
 							</Button>
 							<input
@@ -436,14 +457,30 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 								step={1}
 								value={zoom}
 								onChange={(event) => setEditorZoom(Number(event.target.value))}
-								className="w-24 cursor-pointer accent-primary sm:w-32"
+								className="w-20 cursor-pointer accent-primary sm:w-28"
 							/>
-							<Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom in" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => setEditorZoom(zoomRef.current + 25)}>
+							<Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom in" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => setEditorZoom(zoomRef.current + 10)}>
 								<ZoomIn aria-hidden="true" />
 							</Button>
-							<output className="w-10 text-right font-mono text-[10px] text-muted-foreground">{zoom}%</output>
+							<label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+								<span className="sr-only">Exact canvas zoom percentage</span>
+								<input
+									type="number"
+									min={MIN_EDITOR_ZOOM}
+									max={MAX_EDITOR_ZOOM}
+									step={1}
+									value={zoom}
+									onChange={(event) => {
+										if (Number.isFinite(event.currentTarget.valueAsNumber)) setEditorZoom(event.currentTarget.valueAsNumber);
+									}}
+									className="h-7 w-14 rounded-md border border-input bg-background px-1 text-right font-mono text-[10px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								/>
+								%
+							</label>
 						</div>
-						<p className="hidden text-[11px] text-muted-foreground sm:block">Mouse wheel to zoom</p>
+						<p className="hidden text-[11px] text-muted-foreground md:block">
+							Mouse wheel · {MIN_EDITOR_ZOOM}–{MAX_EDITOR_ZOOM}%
+						</p>
 						<p className="min-w-0 flex-1 text-right text-[11px] text-muted-foreground">
 							{strokes.length ? `${strokes.length} edit${strokes.length === 1 ? "" : "s"}` : "No manual edits"}
 						</p>

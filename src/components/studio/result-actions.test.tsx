@@ -31,10 +31,10 @@ describe("per-image result actions", () => {
 		expect(markup).toContain("Download");
 	});
 
-	it("renders a dedicated editor page with restore, erase, history, precision, and save controls", () => {
+	it("renders a dedicated editor page with both brush actions, zoom presets, history, precision, and save controls", () => {
 		const markup = renderToStaticMarkup(<MaskEditor job={completedJob} onClose={vi.fn()} onImprove={vi.fn()} onSave={vi.fn()} />);
 
-		for (const label of ["Restore", "Erase", "Undo", "Reset", "Run precision pass", "Save refinement"]) expect(markup).toContain(label);
+		for (const label of ["Restore pixels", "Make transparent", "Fit", "100%", "Undo", "Reset", "Run precision pass", "Save refinement"]) expect(markup).toContain(label);
 		expect(markup).toContain('data-page="mask-editor"');
 		expect(markup).toContain("Back to studio");
 		expect(markup).not.toContain('role="dialog"');

@@ -1,11 +1,11 @@
-import type { CanvasBounds, EditorPoint, EditorStroke } from "@/types/editor";
+import type { CanvasBounds, EditorPoint, EditorStroke, MaskEditorTool } from "@/types/editor";
 
 const clamp = (value: number, minimum: number, maximum: number): number => {
 	return Math.max(minimum, Math.min(maximum, value));
 };
 
-export const MIN_EDITOR_ZOOM = 25;
-export const MAX_EDITOR_ZOOM = 400;
+export const MIN_EDITOR_ZOOM = 10;
+export const MAX_EDITOR_ZOOM = 800;
 
 export const clampEditorZoom = (zoom: number): number => {
 	return clamp(Math.round(Number.isFinite(zoom) ? zoom : 100), MIN_EDITOR_ZOOM, MAX_EDITOR_ZOOM);
@@ -17,6 +17,17 @@ export const editorZoomFromWheel = (currentZoom: number, deltaY: number, deltaMo
 	return clampEditorZoom(currentZoom * Math.exp(-deltaY * deltaScale * 0.0015));
 };
 
+export const fitEditorZoom = (viewportWidth: number, viewportHeight: number, canvasWidth: number, canvasHeight: number, padding = 48): number => {
+	if (viewportWidth <= 0 || viewportHeight <= 0 || canvasWidth <= 0 || canvasHeight <= 0) return 100;
+	const availableWidth = Math.max(1, viewportWidth - padding);
+	const availableHeight = Math.max(1, viewportHeight - padding);
+	const canvasAspectRatio = canvasWidth / canvasHeight;
+	const fittedWidth = Math.min(availableWidth, availableHeight * canvasAspectRatio);
+	return clampEditorZoom((fittedWidth / availableWidth) * 100);
+};
+
+export const oppositeEditorTool = (tool: MaskEditorTool): MaskEditorTool => (tool === "restore" ? "erase" : "restore");
+
 export const brushPreviewFromClient = (
 	clientX: number,
 	clientY: number,
@@ -27,7 +38,8 @@ export const brushPreviewFromClient = (
 	canvasWidth: number,
 	brushSize: number,
 ): { diameter: number; left: number; top: number } | null => {
-	const insideCanvas = clientX >= canvasBounds.left && clientX <= canvasBounds.left + canvasBounds.width && clientY >= canvasBounds.top && clientY <= canvasBounds.top + canvasBounds.height;
+	const insideCanvas =
+		clientX >= canvasBounds.left && clientX <= canvasBounds.left + canvasBounds.width && clientY >= canvasBounds.top && clientY <= canvasBounds.top + canvasBounds.height;
 	if (!insideCanvas || canvasWidth <= 0 || canvasBounds.width <= 0) return null;
 
 	return {

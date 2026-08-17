@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { brushPreviewFromClient, canvasPointFromClient, clampEditorZoom, drawEditorStroke, editorZoomFromWheel, encodeCanvasPng, MAX_EDITOR_ZOOM, MIN_EDITOR_ZOOM } from "@/lib/mask-editor";
+import {
+	brushPreviewFromClient,
+	canvasPointFromClient,
+	clampEditorZoom,
+	drawEditorStroke,
+	editorZoomFromWheel,
+	encodeCanvasPng,
+	fitEditorZoom,
+	MAX_EDITOR_ZOOM,
+	MIN_EDITOR_ZOOM,
+	oppositeEditorTool,
+} from "@/lib/mask-editor";
 
 const createContext = () => {
 	const pattern = {} as CanvasPattern;
@@ -45,22 +56,21 @@ describe("mask editor zoom", () => {
 		expect(clampEditorZoom(Number.NaN)).toBe(100);
 		expect(clampEditorZoom(250.6)).toBe(251);
 	});
+
+	it("fits wide and tall canvases inside the available viewport", () => {
+		expect(fitEditorZoom(1200, 800, 1600, 900)).toBe(100);
+		expect(fitEditorZoom(1200, 800, 800, 1000)).toBe(52);
+		expect(fitEditorZoom(0, 800, 800, 1000)).toBe(100);
+	});
 });
 
 describe("mask brush preview", () => {
 	it("matches the rendered brush diameter and accounts for viewport scrolling", () => {
-		expect(
-			brushPreviewFromClient(
-				340,
-				230,
-				{ left: 100, top: 50, width: 800, height: 600 },
-				{ left: 140, top: 80, width: 400, height: 300 },
-				200,
-				100,
-				1000,
-				64,
-			),
-		).toEqual({ diameter: 25.6, left: 440, top: 280 });
+		expect(brushPreviewFromClient(340, 230, { left: 100, top: 50, width: 800, height: 600 }, { left: 140, top: 80, width: 400, height: 300 }, 200, 100, 1000, 64)).toEqual({
+			diameter: 25.6,
+			left: 440,
+			top: 280,
+		});
 	});
 
 	it("hides the brush outside the canvas or when the canvas is collapsed", () => {
@@ -71,6 +81,11 @@ describe("mask brush preview", () => {
 });
 
 describe("mask brush rendering", () => {
+	it("switches to the opposite brush action", () => {
+		expect(oppositeEditorTool("restore")).toBe("erase");
+		expect(oppositeEditorTool("erase")).toBe("restore");
+	});
+
 	it("erases a single-point stroke with a round brush", () => {
 		const { context } = createContext();
 		drawEditorStroke(context as unknown as CanvasRenderingContext2D, { tool: "erase", size: 24, strength: 0.75, points: [{ x: 4, y: 8 }] }, {} as CanvasImageSource);
