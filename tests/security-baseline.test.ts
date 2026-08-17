@@ -105,15 +105,25 @@ describe("repository automation security", () => {
 		expect(pnpmPolicy).toMatch(/^blockExoticSubdeps:\s*true$/m);
 	});
 
-	it("keeps ONNX Runtime aligned with the background-removal peer dependency", () => {
+	it("keeps ONNX Runtime aligned with the background-removal compatibility policy", () => {
 		const applicationPackage = JSON.parse(readRepositoryFile("package.json")) as {
 			dependencies: Record<string, string>;
 		};
-		const backgroundRemovalPackage = JSON.parse(readRepositoryFile("node_modules", "@imgly", "background-removal", "package.json")) as {
-			peerDependencies: Record<string, string>;
-		};
+		const pnpmPolicy = readRepositoryFile("pnpm-workspace.yaml");
+		const backgroundRemovalPeerOverride = pnpmPolicy.match(/^\s{2}'@imgly\/background-removal@1\.7\.0>onnxruntime-web':\s*(\S+)$/m)?.[1];
+		const backgroundRemovalBundle = readRepositoryFile("node_modules", "@imgly", "background-removal", "dist", "index.mjs");
 
-		expect(applicationPackage.dependencies["onnxruntime-web"]).toBe(backgroundRemovalPackage.peerDependencies["onnxruntime-web"]);
+		expect(backgroundRemovalPeerOverride).toBeDefined();
+		expect(applicationPackage.dependencies["onnxruntime-web"]).toBe(backgroundRemovalPeerOverride);
+		expect(pnpmPolicy).toMatch(/^\s{2}'@imgly\/background-removal@1\.7\.0': patches\/@imgly__background-removal@1\.7\.0\.patch$/m);
+		for (const asset of [
+			"ort-wasm-simd-threaded.mjs",
+			"ort-wasm-simd-threaded.wasm",
+			"ort-wasm-simd-threaded.jsep.mjs",
+			"ort-wasm-simd-threaded.jsep.wasm",
+		]) {
+			expect(backgroundRemovalBundle).toContain(`onnxruntime-web/${asset}?url`);
+		}
 	});
 
 	it("requires human accountability and security checks for AI-assisted changes", () => {
