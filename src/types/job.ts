@@ -32,6 +32,7 @@ export interface JobCardProps {
 	job: ImageJob;
 	backgroundCss: string | null;
 	onDownload: (job: ImageJob) => void;
+	onDownloadProject: (job: ImageJob) => void;
 	onEdit: (job: ImageJob) => void;
 	onImprove: (id: string) => void;
 	onRetry: (id: string) => void;
@@ -41,6 +42,7 @@ export interface JobCardProps {
 export interface JobQueueProps {
 	jobs: ImageJob[];
 	onDownload: (job: ImageJob) => void;
+	onDownloadProject: (job: ImageJob) => void;
 	onEdit: (job: ImageJob) => void;
 	onRetry: (id: string) => void;
 	onRemove: (id: string) => void;
