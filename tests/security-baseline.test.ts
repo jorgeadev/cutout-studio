@@ -20,6 +20,7 @@ describe("browser security boundaries", () => {
 			"Cross-Origin-Embedder-Policy": "require-corp",
 			"Cross-Origin-Opener-Policy": "same-origin",
 		});
+		expect(localConfig.optimizeDeps?.exclude).toContain("@imgly/background-removal");
 
 		const productionConfig = JSON.parse(readRepositoryFile("vercel.json")) as {
 			headers: Array<{ headers: Array<{ key: string; value: string }> }>;
