@@ -149,6 +149,41 @@ export const renderJob = async (job: ImageJob, bg: BackgroundConfig, exp: Export
 	}
 };
 
+/** Creates the lightweight, checkerboard-backed preview stored in a .cutout project. */
+export const renderProjectPreview = async (src: string, size = 512): Promise<Blob> => {
+	const img = await loadImage(src);
+	return new Promise((resolve, reject) => {
+		try {
+			const canvas = document.createElement("canvas");
+			canvas.width = size;
+			canvas.height = size;
+			const ctx = canvas.getContext("2d");
+			if (!ctx) {
+				reject(new Error("Canvas is not available"));
+				return;
+			}
+
+			const tileSize = Math.max(16, Math.round(size / 16));
+			for (let y = 0; y < size; y += tileSize) {
+				for (let x = 0; x < size; x += tileSize) {
+					ctx.fillStyle = (Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2 === 0 ? "#f4f4f5" : "#d4d4d8";
+					ctx.fillRect(x, y, tileSize, tileSize);
+				}
+			}
+
+			const available = Math.max(1, size - Math.round(size * 0.1));
+			const scale = available / Math.max(img.naturalWidth, img.naturalHeight);
+			const width = Math.max(1, Math.round(img.naturalWidth * scale));
+			const height = Math.max(1, Math.round(img.naturalHeight * scale));
+			ctx.imageSmoothingQuality = "high";
+			ctx.drawImage(img, Math.round((size - width) / 2), Math.round((size - height) / 2), width, height);
+			canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Preview encoding failed"))), "image/png");
+		} catch {
+			reject(new Error("Preview encoding failed"));
+		}
+	});
+};
+
 export const triggerDownload = (blob: Blob, fileName: string) => {
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement("a");

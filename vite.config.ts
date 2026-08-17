@@ -9,6 +9,12 @@ const crossOriginIsolationHeaders = {
 
 export default defineConfig({
 	plugins: [react()],
+	// Rolldown treats `?url` on the patched ONNX .mjs exports as part of a
+	// Windows filename during dependency optimization. Vite can transform the
+	// ESM package and its version-matched runtime assets directly instead.
+	optimizeDeps: {
+		exclude: ["@imgly/background-removal"],
+	},
 	server: {
 		headers: crossOriginIsolationHeaders,
 	},

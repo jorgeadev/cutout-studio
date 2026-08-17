@@ -1,5 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
-import { canvasPointFromClient, drawEditorStroke, encodeCanvasPng } from "@/lib/mask-editor";
+import {
+	activeEditorEdits,
+	applyMagicSelection,
+	appendEditorHistory,
+	brushPreviewFromClient,
+	canvasPointFromClient,
+	clampEditorZoom,
+	createEditorHistory,
+	drawEditorStroke,
+	editorZoomFromWheel,
+	encodeCanvasPng,
+	fitEditorZoom,
+	imageMatchesCanvasAspectRatio,
+	MAX_EDITOR_ZOOM,
+	MIN_EDITOR_ZOOM,
+	oppositeEditorTool,
+	panScrollFromDrag,
+	redoEditorHistory,
+	undoEditorHistory,
+} from "@/lib/mask-editor";
+import type { EditorStroke } from "@/types/editor";
+
+const imageDataFrom = (pixels: number[], width: number): ImageData =>
+	({ data: new Uint8ClampedArray(pixels), width, height: pixels.length / 4 / width, colorSpace: "srgb" }) as ImageData;
+
+const createPixelContext = (pixels: ImageData) => ({
+	getImageData: vi.fn(() => pixels),
+	putImageData: vi.fn(),
+});
 
 const createContext = () => {
 	const pattern = {} as CanvasPattern;
@@ -21,6 +49,45 @@ const createContext = () => {
 	return { context, pattern };
 };
 
+const historyStroke = (x: number): EditorStroke => ({ tool: "erase", size: 10, strength: 1, points: [{ x, y: 0 }] });
+const historyXs = (history: ReturnType<typeof createEditorHistory>): Array<number | undefined> =>
+	activeEditorEdits(history).map((edit) => ("kind" in edit ? edit.point.x : edit.points[0]?.x));
+
+describe("mask editor history", () => {
+	it("moves backward and forward through multiple edits", () => {
+		let history = createEditorHistory();
+		history = appendEditorHistory(history, historyStroke(1));
+		history = appendEditorHistory(history, historyStroke(2));
+		history = appendEditorHistory(history, historyStroke(3));
+
+		history = undoEditorHistory(undoEditorHistory(history));
+		expect(historyXs(history)).toEqual([1]);
+
+		history = redoEditorHistory(history);
+		expect(historyXs(history)).toEqual([1, 2]);
+	});
+
+	it("discards the forward branch when a new edit follows undo", () => {
+		let history = createEditorHistory();
+		for (const x of [1, 2, 3]) history = appendEditorHistory(history, historyStroke(x));
+		history = undoEditorHistory(history);
+		history = appendEditorHistory(history, historyStroke(4));
+
+		expect(historyXs(history)).toEqual([1, 2, 4]);
+		expect(redoEditorHistory(history)).toBe(history);
+	});
+
+	it("keeps older changes applied when the undo window reaches its limit", () => {
+		let history = createEditorHistory();
+		for (const x of [1, 2, 3]) history = appendEditorHistory(history, historyStroke(x), 2);
+
+		expect(history.base).toHaveLength(1);
+		history = undoEditorHistory(undoEditorHistory(history));
+		history = undoEditorHistory(history);
+		expect(historyXs(history)).toEqual([1]);
+	});
+});
+
 describe("mask editor coordinates", () => {
 	it("maps displayed pointer coordinates to full-resolution canvas pixels", () => {
 		expect(canvasPointFromClient(60, 45, { left: 10, top: 20, width: 100, height: 50 }, 1000, 500)).toEqual({ x: 500, y: 250 });
@@ -32,7 +99,65 @@ describe("mask editor coordinates", () => {
 	});
 });
 
+describe("mask editor zoom", () => {
+	it("zooms smoothly in the expected wheel direction", () => {
+		expect(editorZoomFromWheel(100, -100)).toBe(116);
+		expect(editorZoomFromWheel(100, 100)).toBe(86);
+		expect(editorZoomFromWheel(100, -1, 1)).toBe(102);
+	});
+
+	it("keeps wheel and direct zoom values within the editor limits", () => {
+		expect(MAX_EDITOR_ZOOM).toBe(3200);
+		expect(editorZoomFromWheel(MAX_EDITOR_ZOOM, -10_000)).toBe(MAX_EDITOR_ZOOM);
+		expect(editorZoomFromWheel(MIN_EDITOR_ZOOM, 10_000)).toBe(MIN_EDITOR_ZOOM);
+		expect(clampEditorZoom(Number.NaN)).toBe(100);
+		expect(clampEditorZoom(250.6)).toBe(251);
+	});
+
+	it("fits wide and tall canvases inside the available viewport", () => {
+		expect(fitEditorZoom(1200, 800, 1600, 900)).toBe(100);
+		expect(fitEditorZoom(1200, 800, 800, 1000)).toBe(52);
+		expect(fitEditorZoom(0, 800, 800, 1000)).toBe(100);
+	});
+});
+
+describe("edited image loading", () => {
+	it("accepts proportional exports at different resolutions", () => {
+		expect(imageMatchesCanvasAspectRatio(4096, 3072, 1024, 768)).toBe(true);
+		expect(imageMatchesCanvasAspectRatio(1000, 1000, 1024, 768)).toBe(false);
+		expect(imageMatchesCanvasAspectRatio(0, 1000, 1024, 768)).toBe(false);
+	});
+});
+
+describe("mask editor panning", () => {
+	it("translates pointer dragging into scroll offsets", () => {
+		expect(panScrollFromDrag(240, 120, 100, 100, 60, 40)).toEqual({ left: 280, top: 180 });
+		expect(panScrollFromDrag(20, 10, 100, 100, 160, 180)).toEqual({ left: 0, top: 0 });
+	});
+});
+
+describe("mask brush preview", () => {
+	it("matches the rendered brush diameter and accounts for viewport scrolling", () => {
+		expect(brushPreviewFromClient(340, 230, { left: 100, top: 50, width: 800, height: 600 }, { left: 140, top: 80, width: 400, height: 300 }, 200, 100, 1000, 64)).toEqual({
+			diameter: 25.6,
+			left: 440,
+			top: 280,
+		});
+	});
+
+	it("hides the brush outside the canvas or when the canvas is collapsed", () => {
+		const viewport = { left: 0, top: 0, width: 500, height: 500 };
+		expect(brushPreviewFromClient(10, 10, viewport, { left: 20, top: 20, width: 400, height: 400 }, 0, 0, 1000, 64)).toBeNull();
+		expect(brushPreviewFromClient(20, 20, viewport, { left: 20, top: 20, width: 0, height: 0 }, 0, 0, 1000, 64)).toBeNull();
+	});
+});
+
 describe("mask brush rendering", () => {
+	it("switches to the opposite brush action", () => {
+		expect(oppositeEditorTool("restore")).toBe("erase");
+		expect(oppositeEditorTool("erase")).toBe("restore");
+	});
+
 	it("erases a single-point stroke with a round brush", () => {
 		const { context } = createContext();
 		drawEditorStroke(context as unknown as CanvasRenderingContext2D, { tool: "erase", size: 24, strength: 0.75, points: [{ x: 4, y: 8 }] }, {} as CanvasImageSource);
@@ -80,6 +205,36 @@ describe("mask brush rendering", () => {
 		const { context } = createContext();
 		drawEditorStroke(context as unknown as CanvasRenderingContext2D, { tool: "erase", size: 20, strength: 1, points: [] }, {} as CanvasImageSource);
 		expect(context.save).not.toHaveBeenCalled();
+	});
+});
+
+describe("mask magic selection", () => {
+	it("makes only the connected matching region transparent", () => {
+		const currentPixels = imageDataFrom([200, 10, 10, 255, 200, 10, 10, 255, 10, 10, 200, 255, 200, 10, 10, 255], 4);
+		const originalPixels = imageDataFrom([...currentPixels.data], 4);
+		const context = createPixelContext(currentPixels);
+
+		expect(applyMagicSelection(context as unknown as CanvasRenderingContext2D, { kind: "magic", tool: "erase", point: { x: 0, y: 0 }, tolerance: 0 }, originalPixels)).toBe(2);
+		expect([currentPixels.data[3], currentPixels.data[7], currentPixels.data[11], currentPixels.data[15]]).toEqual([0, 0, 255, 255]);
+		expect(context.putImageData).toHaveBeenCalledOnce();
+	});
+
+	it("restores a connected region using colors from the original image", () => {
+		const originalPixels = imageDataFrom([200, 10, 10, 255, 200, 10, 10, 255, 10, 10, 200, 255, 200, 10, 10, 255], 4);
+		const currentPixels = imageDataFrom(new Array(16).fill(0), 4);
+		const context = createPixelContext(currentPixels);
+
+		expect(applyMagicSelection(context as unknown as CanvasRenderingContext2D, { kind: "magic", tool: "restore", point: { x: 0, y: 0 }, tolerance: 0 }, originalPixels)).toBe(2);
+		expect([currentPixels.data[3], currentPixels.data[7], currentPixels.data[11], currentPixels.data[15]]).toEqual([255, 255, 0, 0]);
+	});
+
+	it("uses tolerance to include nearby colors", () => {
+		const currentPixels = imageDataFrom([100, 100, 100, 255, 120, 100, 100, 255, 180, 100, 100, 255], 3);
+		const originalPixels = imageDataFrom([...currentPixels.data], 3);
+		const context = createPixelContext(currentPixels);
+
+		expect(applyMagicSelection(context as unknown as CanvasRenderingContext2D, { kind: "magic", tool: "erase", point: { x: 0, y: 0 }, tolerance: 5 }, originalPixels)).toBe(2);
+		expect([currentPixels.data[3], currentPixels.data[7], currentPixels.data[11]]).toEqual([0, 0, 255]);
 	});
 });
 

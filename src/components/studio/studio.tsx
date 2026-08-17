@@ -15,8 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
+import { createCutoutProject, cutoutProjectFileName, MAX_CUTOUT_PROJECT_BYTES, readCutoutProject } from "@/lib/cutout-project";
 import { DEFAULT_BACKGROUND, DEFAULT_EXPORT, DEFAULT_PROCESSING } from "@/lib/defaults";
-import { backgroundToCss, loadImage, outputFileName, renderJob, triggerDownload } from "@/lib/image-utils";
+import { backgroundToCss, loadImage, outputFileName, renderJob, renderProjectPreview, triggerDownload } from "@/lib/image-utils";
+import { imageMatchesCanvasAspectRatio } from "@/lib/mask-editor";
 import { precisionProcessingConfig } from "@/lib/processing-options";
 import { preloadBackgroundModel, removeImageBackground } from "@/lib/remove-background";
 import type { BackgroundConfig } from "@/types/background";
@@ -30,6 +32,7 @@ const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 15 * 1000;
 const SETTINGS_KEY = "cutout-studio-settings";
 const LEGACY_SETTINGS_KEY = "cutout-settings";
+const EDITOR_HISTORY_KEY = "cutoutStudioEditor";
 const EMPTY_DOWNLOAD: ModelDownloadState = { status: "idle", progress: 0 };
 
 const safeObjectUrl = (blob: Blob): string | undefined => {
@@ -38,6 +41,14 @@ const safeObjectUrl = (blob: Blob): string | undefined => {
 	} catch {
 		return undefined;
 	}
+};
+
+const createProjectForJob = async (job: ImageJob): Promise<Blob> => {
+	if (!job.cutoutUrl) throw new Error("Image has not been processed yet");
+	const response = await fetch(job.cutoutUrl);
+	if (!response.ok) throw new Error("Could not read the edited result");
+	const [edited, preview] = await Promise.all([response.blob(), renderProjectPreview(job.cutoutUrl)]);
+	return createCutoutProject({ original: job.file, originalName: job.name, edited, preview });
 };
 
 const initialDownloads = (): Record<ModelQuality, ModelDownloadState> => {
@@ -55,6 +66,7 @@ export const Studio = () => {
 	const [processing, setProcessing] = useState<ProcessingConfig>(DEFAULT_PROCESSING);
 	const [modelDownloads, setModelDownloads] = useState<Record<ModelQuality, ModelDownloadState>>(initialDownloads);
 	const [zipping, setZipping] = useState(false);
+	const [openingProject, setOpeningProject] = useState(false);
 	const [editingJobId, setEditingJobId] = useState<string>();
 	const busyRef = useRef(false);
 	const progressStampRef = useRef<{ id: string; updatedAt: number } | undefined>(undefined);
@@ -82,6 +94,15 @@ export const Studio = () => {
 			// are optional and must never take the app down with them.
 		}
 	}, [background, exportConfig, processing]);
+
+	useEffect(() => {
+		const handlePopState = (event: PopStateEvent) => {
+			const state = event.state && typeof event.state === "object" ? (event.state as Record<string, unknown>) : undefined;
+			setEditingJobId(typeof state?.[EDITOR_HISTORY_KEY] === "string" ? state[EDITOR_HISTORY_KEY] : undefined);
+		};
+		window.addEventListener("popstate", handlePopState);
+		return () => window.removeEventListener("popstate", handlePopState);
+	}, []);
 
 	const patchJob = useCallback((id: string, patch: Partial<ImageJob>) => {
 		setJobs((current) => current.map((job) => (job.id === id ? { ...job, ...patch } : job)));
@@ -238,8 +259,13 @@ export const Studio = () => {
 	const failed = jobs.filter((job) => job.status === "error").length;
 	const activelyProcessing = jobs.some((job) => job.status === "processing");
 	const modelPreparing = Object.values(modelDownloads).some((entry) => entry.status === "downloading");
+	const openEditor = useCallback((id: string) => {
+		const currentState = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+		window.history.pushState({ ...currentState, [EDITOR_HISTORY_KEY]: id }, "");
+		setEditingJobId(id);
+	}, []);
 
-	const handleDownload = useCallback(
+	const handleDownloadImage = useCallback(
 		async (job: ImageJob) => {
 			try {
 				const blob = await renderJob(job, background, exportConfig);
@@ -251,6 +277,14 @@ export const Studio = () => {
 		[background, exportConfig],
 	);
 
+	const handleDownloadProject = useCallback(async (job: ImageJob) => {
+		try {
+			triggerDownload(await createProjectForJob(job), cutoutProjectFileName(job.name));
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Could not save the .cutout project");
+		}
+	}, []);
+
 	const handleDownloadAll = useCallback(async () => {
 		if (!doneJobs.length) return;
 		setZipping(true);
@@ -259,15 +293,16 @@ export const Studio = () => {
 			const zip = new JSZip();
 			const used = new Set<string>();
 			for (const job of doneJobs) {
-				const blob = await renderJob(job, background, exportConfig);
-				let name = outputFileName(job.name, exportConfig.format);
+				const blob = exportConfig.downloadKind === "project" ? await createProjectForJob(job) : await renderJob(job, background, exportConfig);
+				let name = exportConfig.downloadKind === "project" ? cutoutProjectFileName(job.name) : outputFileName(job.name, exportConfig.format);
 				let counter = 2;
 				while (used.has(name)) {
-					name = outputFileName(`${job.name.replace(/\.[^./\\]+$/, "")}-${counter}`, exportConfig.format);
+					const numberedName = `${job.name.replace(/\.[^./\\]+$/, "")}-${counter}`;
+					name = exportConfig.downloadKind === "project" ? cutoutProjectFileName(numberedName) : outputFileName(numberedName, exportConfig.format);
 					counter += 1;
 				}
 				used.add(name);
-				zip.file(name, blob);
+				zip.file(name, new Uint8Array(await blob.arrayBuffer()));
 			}
 			const archive = await zip.generateAsync({ type: "blob" });
 			triggerDownload(archive, `cutout-studio-${new Date().toISOString().slice(0, 10)}.zip`);
@@ -279,34 +314,119 @@ export const Studio = () => {
 		}
 	}, [background, doneJobs, exportConfig]);
 
-	const handleEdit = useCallback((job: ImageJob) => {
-		setEditingJobId(job.id);
+	const handleEdit = useCallback((job: ImageJob) => openEditor(job.id), [openEditor]);
+
+	const handleOpenProject = useCallback(
+		async (file: File) => {
+			if (jobs.length >= MAX_FILES) {
+				toast.error(`You can keep up to ${MAX_FILES} images in the workspace.`);
+				return;
+			}
+			if (file.size > MAX_CUTOUT_PROJECT_BYTES) {
+				toast.error("This .cutout project is too large to open on this device.");
+				return;
+			}
+
+			setOpeningProject(true);
+			let originalUrl: string | undefined;
+			let cutoutUrl: string | undefined;
+			try {
+				const project = await readCutoutProject(file);
+				const originalFile = new File([project.original], project.originalName, { type: project.original.type });
+				originalUrl = safeObjectUrl(originalFile);
+				cutoutUrl = safeObjectUrl(project.edited);
+				if (!originalUrl || !cutoutUrl) throw new Error("The device could not allocate the project images");
+				const [originalImage, editedImage] = await Promise.all([loadImage(originalUrl), loadImage(cutoutUrl)]);
+				if (!imageMatchesCanvasAspectRatio(editedImage.naturalWidth, editedImage.naturalHeight, originalImage.naturalWidth, originalImage.naturalHeight)) {
+					throw new Error("The original and edited images in this .cutout project do not match");
+				}
+
+				const id = `${project.originalName}-${originalFile.size}-${crypto.randomUUID()}`;
+				const restoredJob: ImageJob = {
+					id,
+					file: originalFile,
+					name: project.originalName,
+					size: originalFile.size,
+					originalUrl,
+					cutoutUrl,
+					width: originalImage.naturalWidth,
+					height: originalImage.naturalHeight,
+					status: "done",
+					progress: 1,
+					stage: "Project restored",
+					manuallyEdited: true,
+				};
+				setJobs((current) => [...current, restoredJob]);
+				openEditor(id);
+				originalUrl = undefined;
+				cutoutUrl = undefined;
+				toast.success(".cutout project opened");
+			} catch (error) {
+				toast.error(error instanceof Error ? error.message : "Could not open the .cutout project");
+			} finally {
+				if (originalUrl) URL.revokeObjectURL(originalUrl);
+				if (cutoutUrl) URL.revokeObjectURL(cutoutUrl);
+				setOpeningProject(false);
+			}
+		},
+		[jobs.length, openEditor],
+	);
+
+	useEffect(() => {
+		type LaunchFileHandle = { getFile: () => Promise<File> };
+		type LaunchQueue = { setConsumer: (consumer: (params: { files?: readonly LaunchFileHandle[] }) => void) => void };
+		const launchQueue = (window as typeof window & { launchQueue?: LaunchQueue }).launchQueue;
+		if (!launchQueue) return;
+		let active = true;
+		launchQueue.setConsumer((params) => {
+			const handle = params.files?.[0];
+			if (!handle) return;
+			void handle
+				.getFile()
+				.then((file) => {
+					if (active) void handleOpenProject(file);
+				})
+				.catch(() => {
+					if (active) toast.error("Could not read the selected .cutout project");
+				});
+		});
+		return () => {
+			active = false;
+		};
+	}, [handleOpenProject]);
+
+	const handleCloseEditor = useCallback(() => {
+		const state = window.history.state && typeof window.history.state === "object" ? (window.history.state as Record<string, unknown>) : undefined;
+		if (typeof state?.[EDITOR_HISTORY_KEY] === "string") window.history.back();
+		else setEditingJobId(undefined);
 	}, []);
 
-	const handleSaveRefinement = useCallback((id: string, blob: Blob) => {
-		const cutoutUrl = safeObjectUrl(blob);
-		if (!cutoutUrl) {
-			toast.error("Could not save the refinement because the device ran out of memory.");
-			return;
-		}
-		setJobs((current) => {
-			if (!current.some((job) => job.id === id)) {
-				URL.revokeObjectURL(cutoutUrl);
-				return current;
+	const handleSaveRefinement = useCallback(
+		(id: string, blob: Blob) => {
+			const cutoutUrl = safeObjectUrl(blob);
+			if (!cutoutUrl) {
+				toast.error("Could not save the refinement because the device ran out of memory.");
+				return;
 			}
-			return current.map((job) => {
-				if (job.id !== id) return job;
-				if (job.cutoutUrl) URL.revokeObjectURL(job.cutoutUrl);
-				return { ...job, cutoutUrl, manuallyEdited: true };
+			setJobs((current) => {
+				if (!current.some((job) => job.id === id)) {
+					URL.revokeObjectURL(cutoutUrl);
+					return current;
+				}
+				return current.map((job) => {
+					if (job.id !== id) return job;
+					if (job.cutoutUrl) URL.revokeObjectURL(job.cutoutUrl);
+					return { ...job, cutoutUrl, manuallyEdited: true };
+				});
 			});
-		});
-		setEditingJobId(undefined);
-		toast.success("Manual refinement saved");
-	}, []);
+			handleCloseEditor();
+			toast.success("Manual refinement saved");
+		},
+		[handleCloseEditor],
+	);
 
 	const handleImprove = useCallback(
 		(id: string) => {
-			setEditingJobId(undefined);
 			setJobs((current) =>
 				current.map((job) => {
 					if (job.id !== id) return job;
@@ -326,9 +446,10 @@ export const Studio = () => {
 					};
 				}),
 			);
+			handleCloseEditor();
 			toast.message("AI Precision queued", { description: "Using the full 32-bit model with sharpened hair and fine edges." });
 		},
-		[processing.device],
+		[handleCloseEditor, processing.device],
 	);
 
 	const handleRemove = useCallback((id: string) => {
@@ -375,6 +496,10 @@ export const Studio = () => {
 			return [];
 		});
 	}, []);
+
+	if (editingJob) {
+		return <MaskEditor job={editingJob} onClose={handleCloseEditor} onImprove={handleImprove} onSave={handleSaveRefinement} />;
+	}
 
 	return (
 		<div className="min-h-dvh overflow-x-hidden bg-background">
@@ -435,7 +560,7 @@ export const Studio = () => {
 				<main className="relative mx-auto flex w-full min-w-0 max-w-360 flex-col gap-6 px-4 pb-10 sm:px-6 lg:flex-row lg:items-start">
 					{/* Controls */}
 					<aside className="flex w-full min-w-0 flex-col gap-5 lg:sticky lg:top-20 lg:w-100 lg:shrink-0">
-						<Uploader onFiles={addFiles} disabled={modelPreparing} />
+						<Uploader onFiles={addFiles} onProject={handleOpenProject} disabled={modelPreparing || openingProject} />
 
 						<Card className="overflow-hidden border-primary/15 shadow-sm">
 							<CardHeader className="border-b border-border/60 bg-muted/20">
@@ -473,14 +598,14 @@ export const Studio = () => {
 						<Card>
 							<CardHeader>
 								<CardTitle className="text-sm">Export</CardTitle>
-								<CardDescription>Applies to single and batch downloads.</CardDescription>
+								<CardDescription>Choose a ready-to-use image or a project you can reopen later.</CardDescription>
 							</CardHeader>
 							<CardContent>
 								<ExportOptions value={exportConfig} onChange={setExportConfig} />
 							</CardContent>
 						</Card>
 
-						{background.kind === "transparent" && exportConfig.format === "image/jpeg" ? (
+						{exportConfig.downloadKind === "image" && background.kind === "transparent" && exportConfig.format === "image/jpeg" ? (
 							<Alert>
 								<AlertTitle>JPG has no transparency</AlertTitle>
 								<AlertDescription>Transparent areas will be filled with white on export.</AlertDescription>
@@ -531,7 +656,7 @@ export const Studio = () => {
 											<div className="flex flex-wrap items-center gap-2">
 												<Button size="sm" disabled={!doneJobs.length || zipping} onClick={handleDownloadAll}>
 													<FileArchive data-icon="inline-start" aria-hidden="true" />
-													{zipping ? "Zipping…" : "Download all"}
+													{zipping ? "Zipping…" : exportConfig.downloadKind === "project" ? "Download all .cutout" : "Download all images"}
 												</Button>
 												<Button variant="outline" size="sm" onClick={handleClearAll}>
 													<Trash2 data-icon="inline-start" aria-hidden="true" />
@@ -542,7 +667,14 @@ export const Studio = () => {
 									</CardHeader>
 									<CardContent>
 										<Separator className="mb-1" />
-										<JobQueue jobs={jobs} onDownload={handleDownload} onEdit={handleEdit} onRetry={handleRetry} onRemove={handleRemove} />
+										<JobQueue
+											jobs={jobs}
+											onDownload={handleDownloadImage}
+											onDownloadProject={handleDownloadProject}
+											onEdit={handleEdit}
+											onRetry={handleRetry}
+											onRemove={handleRemove}
+										/>
 									</CardContent>
 								</Card>
 
@@ -557,7 +689,8 @@ export const Studio = () => {
 											key={job.id}
 											job={job}
 											backgroundCss={backgroundCss}
-											onDownload={handleDownload}
+											onDownload={handleDownloadImage}
+											onDownloadProject={handleDownloadProject}
 											onEdit={handleEdit}
 											onImprove={handleImprove}
 											onRetry={handleRetry}
@@ -636,8 +769,6 @@ export const Studio = () => {
 					</div>
 				</div>
 			</footer>
-
-			{editingJob ? <MaskEditor job={editingJob} onClose={() => setEditingJobId(undefined)} onImprove={handleImprove} onSave={handleSaveRefinement} /> : null}
 		</div>
 	);
 };

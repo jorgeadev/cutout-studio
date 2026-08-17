@@ -9,6 +9,7 @@ import {
 	outputFileName,
 	readableTextColor,
 	renderJob,
+	renderProjectPreview,
 	triggerDownload,
 } from "@/lib/image-utils";
 import type { BackgroundConfig } from "@/types/background";
@@ -59,9 +60,10 @@ const createCanvasHarness = (encodedBlob = new Blob(["encoded"], { type: "image/
 const createJob = (): ImageJob =>
 	({
 		cutoutUrl: "blob:cutout",
-	} as ImageJob);
+	}) as ImageJob;
 
 const createExport = (overrides: Partial<ExportConfig> = {}): ExportConfig => ({
+	downloadKind: "image",
 	format: "image/png",
 	quality: 0.9,
 	scale: 1,
@@ -129,9 +131,7 @@ describe("image loading and rendering", () => {
 	});
 
 	it("rejects rendering before a cutout exists", async () => {
-		await expect(renderJob({} as ImageJob, { kind: "transparent", color: "#000", color2: "#fff", angle: 0 }, createExport())).rejects.toThrow(
-			"Image has not been processed yet",
-		);
+		await expect(renderJob({} as ImageJob, { kind: "transparent", color: "#000", color2: "#fff", angle: 0 }, createExport())).rejects.toThrow("Image has not been processed yet");
 	});
 
 	it("scales and composites a solid background", async () => {
@@ -166,6 +166,20 @@ describe("image loading and rendering", () => {
 		await renderJob(createJob(), background, createExport({ format: "image/jpeg", quality: 0.72 }));
 		expect(context.fillStyle).toBe("#ffffff");
 		expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/jpeg", 0.72);
+	});
+
+	it("creates a square checkerboard preview for portable project files", async () => {
+		installImageMock(false, 120, 80);
+		const { canvas, context } = createCanvasHarness(new Blob(["preview"], { type: "image/png" }));
+
+		const preview = await renderProjectPreview("blob:cutout");
+
+		expect(preview.type).toBe("image/png");
+		expect(canvas.width).toBe(512);
+		expect(canvas.height).toBe(512);
+		expect(context.fillRect).toHaveBeenCalled();
+		expect(context.drawImage).toHaveBeenCalledWith(expect.anything(), 26, 103, 461, 307);
+		expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/png");
 	});
 
 	it("reports unavailable canvases and failed encodes", async () => {

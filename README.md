@@ -33,7 +33,8 @@ Most background-removal tools send images to a remote server. cutout-studio down
 - Preview results with an interactive before-and-after slider.
 - Keep transparency or add a solid color or two-color gradient.
 - Export PNG, WebP, or JPEG at 50%, 100%, 150%, or 200% scale.
-- Download one result or package the completed batch as a ZIP archive.
+- Download result images, save reopenable `.cutout` projects with embedded previews, or package a completed batch as a ZIP archive.
+- When installed in a supporting browser, open `.cutout` projects from the operating system using the registered Cutout Studio file icon.
 - Install the app as a PWA and reuse cached model files.
 - Use the responsive light or dark interface on desktop and mobile.
 
