@@ -14,6 +14,15 @@ export interface EditorStroke {
 	points: EditorPoint[];
 }
 
+export interface EditorMagicSelection {
+	kind: "magic";
+	tool: MaskEditorTool;
+	point: EditorPoint;
+	tolerance: number;
+}
+
+export type EditorEdit = EditorStroke | EditorMagicSelection;
+
 export interface CanvasBounds {
 	left: number;
 	top: number;

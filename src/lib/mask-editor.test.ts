@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+	applyMagicSelection,
 	brushPreviewFromClient,
 	canvasPointFromClient,
 	clampEditorZoom,
@@ -12,6 +13,14 @@ import {
 	oppositeEditorTool,
 	panScrollFromDrag,
 } from "@/lib/mask-editor";
+
+const imageDataFrom = (pixels: number[], width: number): ImageData =>
+	({ data: new Uint8ClampedArray(pixels), width, height: pixels.length / 4 / width, colorSpace: "srgb" }) as ImageData;
+
+const createPixelContext = (pixels: ImageData) => ({
+	getImageData: vi.fn(() => pixels),
+	putImageData: vi.fn(),
+});
 
 const createContext = () => {
 	const pattern = {} as CanvasPattern;
@@ -141,6 +150,36 @@ describe("mask brush rendering", () => {
 		const { context } = createContext();
 		drawEditorStroke(context as unknown as CanvasRenderingContext2D, { tool: "erase", size: 20, strength: 1, points: [] }, {} as CanvasImageSource);
 		expect(context.save).not.toHaveBeenCalled();
+	});
+});
+
+describe("mask magic selection", () => {
+	it("makes only the connected matching region transparent", () => {
+		const currentPixels = imageDataFrom([200, 10, 10, 255, 200, 10, 10, 255, 10, 10, 200, 255, 200, 10, 10, 255], 4);
+		const originalPixels = imageDataFrom([...currentPixels.data], 4);
+		const context = createPixelContext(currentPixels);
+
+		expect(applyMagicSelection(context as unknown as CanvasRenderingContext2D, { kind: "magic", tool: "erase", point: { x: 0, y: 0 }, tolerance: 0 }, originalPixels)).toBe(2);
+		expect([currentPixels.data[3], currentPixels.data[7], currentPixels.data[11], currentPixels.data[15]]).toEqual([0, 0, 255, 255]);
+		expect(context.putImageData).toHaveBeenCalledOnce();
+	});
+
+	it("restores a connected region using colors from the original image", () => {
+		const originalPixels = imageDataFrom([200, 10, 10, 255, 200, 10, 10, 255, 10, 10, 200, 255, 200, 10, 10, 255], 4);
+		const currentPixels = imageDataFrom(new Array(16).fill(0), 4);
+		const context = createPixelContext(currentPixels);
+
+		expect(applyMagicSelection(context as unknown as CanvasRenderingContext2D, { kind: "magic", tool: "restore", point: { x: 0, y: 0 }, tolerance: 0 }, originalPixels)).toBe(2);
+		expect([currentPixels.data[3], currentPixels.data[7], currentPixels.data[11], currentPixels.data[15]]).toEqual([255, 255, 0, 0]);
+	});
+
+	it("uses tolerance to include nearby colors", () => {
+		const currentPixels = imageDataFrom([100, 100, 100, 255, 120, 100, 100, 255, 180, 100, 100, 255], 3);
+		const originalPixels = imageDataFrom([...currentPixels.data], 3);
+		const context = createPixelContext(currentPixels);
+
+		expect(applyMagicSelection(context as unknown as CanvasRenderingContext2D, { kind: "magic", tool: "erase", point: { x: 0, y: 0 }, tolerance: 5 }, originalPixels)).toBe(2);
+		expect([currentPixels.data[3], currentPixels.data[7], currentPixels.data[11]]).toEqual([0, 0, 255]);
 	});
 });
 

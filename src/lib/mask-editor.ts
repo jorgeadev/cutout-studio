@@ -1,4 +1,4 @@
-import type { CanvasBounds, EditorPoint, EditorStroke, MaskEditorTool } from "@/types/editor";
+import type { CanvasBounds, EditorMagicSelection, EditorPoint, EditorStroke, MaskEditorTool } from "@/types/editor";
 
 const clamp = (value: number, minimum: number, maximum: number): number => {
 	return Math.max(minimum, Math.min(maximum, value));
@@ -90,6 +90,73 @@ export const drawEditorStroke = (context: CanvasRenderingContext2D, stroke: Edit
 	}
 	context.stroke();
 	context.restore();
+};
+
+export const applyMagicSelection = (context: CanvasRenderingContext2D, selection: EditorMagicSelection, originalPixels: ImageData): number => {
+	const { width, height } = originalPixels;
+	if (width <= 0 || height <= 0 || originalPixels.data.length < width * height * 4) return 0;
+
+	const output = context.getImageData(0, 0, width, height);
+	const outputPixels = output.data;
+	const matchingPixels = selection.tool === "restore" ? originalPixels.data : outputPixels;
+	const seedX = clamp(Math.floor(selection.point.x), 0, width - 1);
+	const seedY = clamp(Math.floor(selection.point.y), 0, height - 1);
+	const seedOffset = (seedY * width + seedX) * 4;
+	const seedRed = matchingPixels[seedOffset];
+	const seedGreen = matchingPixels[seedOffset + 1];
+	const seedBlue = matchingPixels[seedOffset + 2];
+	const maximumColorDistance = (clamp(selection.tolerance, 0, 100) / 100) * Math.sqrt(3 * 255 ** 2);
+	const maximumColorDistanceSquared = maximumColorDistance ** 2;
+
+	const matches = (x: number, y: number): boolean => {
+		const offset = (y * width + x) * 4;
+		const outputAlpha = outputPixels[offset + 3];
+		const editable = selection.tool === "erase" ? outputAlpha > 0 : outputAlpha < originalPixels.data[offset + 3];
+		if (!editable) return false;
+		const redDifference = matchingPixels[offset] - seedRed;
+		const greenDifference = matchingPixels[offset + 1] - seedGreen;
+		const blueDifference = matchingPixels[offset + 2] - seedBlue;
+		return redDifference ** 2 + greenDifference ** 2 + blueDifference ** 2 <= maximumColorDistanceSquared;
+	};
+
+	if (!matches(seedX, seedY)) return 0;
+
+	const pendingSegments = [seedY * width + seedX];
+	let changedPixels = 0;
+	while (pendingSegments.length) {
+		const seedIndex = pendingSegments.pop();
+		if (seedIndex === undefined) break;
+		const y = Math.floor(seedIndex / width);
+		let x = seedIndex % width;
+		if (!matches(x, y)) continue;
+		while (x > 0 && matches(x - 1, y)) x -= 1;
+
+		let hasSegmentAbove = false;
+		let hasSegmentBelow = false;
+		for (; x < width && matches(x, y); x += 1) {
+			const offset = (y * width + x) * 4;
+			if (selection.tool === "erase") {
+				outputPixels[offset + 3] = 0;
+			} else {
+				outputPixels.set(originalPixels.data.subarray(offset, offset + 4), offset);
+			}
+			changedPixels += 1;
+
+			if (y > 0) {
+				const matchesAbove = matches(x, y - 1);
+				if (matchesAbove && !hasSegmentAbove) pendingSegments.push((y - 1) * width + x);
+				hasSegmentAbove = matchesAbove;
+			}
+			if (y + 1 < height) {
+				const matchesBelow = matches(x, y + 1);
+				if (matchesBelow && !hasSegmentBelow) pendingSegments.push((y + 1) * width + x);
+				hasSegmentBelow = matchesBelow;
+			}
+		}
+	}
+
+	if (changedPixels) context.putImageData(output, 0, 0);
+	return changedPixels;
 };
 
 export const encodeCanvasPng = (canvas: HTMLCanvasElement): Promise<Blob> => {

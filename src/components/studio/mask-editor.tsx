@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { loadImage, MAX_CANVAS_SIDE } from "@/lib/image-utils";
 import {
+	applyMagicSelection,
 	brushPreviewFromClient,
 	canvasPointFromClient,
 	clampEditorZoom,
@@ -18,13 +19,16 @@ import {
 	panScrollFromDrag,
 } from "@/lib/mask-editor";
 import { cn } from "@/lib/utils";
-import type { EditorStroke, MaskEditorProps, MaskEditorTool } from "@/types/editor";
+import type { EditorEdit, EditorMagicSelection, EditorStroke, MaskEditorProps, MaskEditorTool } from "@/types/editor";
+
+type EditorSelectionMethod = "brush" | "magic";
 
 export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps) => {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const brushCursorRef = useRef<HTMLDivElement>(null);
 	const originalImageRef = useRef<HTMLImageElement>(null);
+	const originalPixelsRef = useRef<ImageData>(null);
 	const cutoutImageRef = useRef<HTMLImageElement>(null);
 	const activeStrokeRef = useRef<EditorStroke>(null);
 	const panGestureRef = useRef<{ pointerId: number; clientX: number; clientY: number; scrollLeft: number; scrollTop: number }>(null);
@@ -33,33 +37,46 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 	const zoomRef = useRef(100);
 	const pendingZoomAnchorRef = useRef<{ clientX: number; clientY: number; relativeX: number; relativeY: number }>(null);
 	const [tool, setTool] = useState<MaskEditorTool>("restore");
+	const [selectionMethod, setSelectionMethod] = useState<EditorSelectionMethod>("brush");
 	const [brushSize, setBrushSize] = useState(64);
 	const [strength, setStrength] = useState(100);
+	const [magicTolerance, setMagicTolerance] = useState(18);
+	const [magicResult, setMagicResult] = useState<string>();
 	const [zoom, setZoom] = useState(100);
 	const [panToolActive, setPanToolActive] = useState(false);
 	const [spacePanActive, setSpacePanActive] = useState(false);
 	const [panning, setPanning] = useState(false);
-	const [strokes, setStrokes] = useState<EditorStroke[]>([]);
+	const [edits, setEdits] = useState<EditorEdit[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string>();
 
-	const redraw = useCallback((nextStrokes: EditorStroke[]) => {
+	const redraw = useCallback((nextEdits: EditorEdit[]) => {
 		const canvas = canvasRef.current;
 		const originalImage = originalImageRef.current;
+		const originalPixels = originalPixelsRef.current;
 		const cutoutImage = cutoutImageRef.current;
 		const context = canvas?.getContext("2d");
 		if (!canvas || !context || !originalImage || !cutoutImage) return;
 
 		context.clearRect(0, 0, canvas.width, canvas.height);
 		context.drawImage(cutoutImage, 0, 0, canvas.width, canvas.height);
-		for (const stroke of nextStrokes) drawEditorStroke(context, stroke, originalImage);
+		for (const edit of nextEdits) {
+			if ("kind" in edit) {
+				if (originalPixels) applyMagicSelection(context, edit, originalPixels);
+			} else {
+				drawEditorStroke(context, edit, originalImage);
+			}
+		}
 	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
 		setLoading(true);
 		setError(undefined);
+		setEdits([]);
+		setMagicResult(undefined);
+		originalPixelsRef.current = null;
 
 		const initialize = async () => {
 			if (!job.cutoutUrl) throw new Error("This image does not have an editable cutout yet");
@@ -67,7 +84,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			if (cancelled) return;
 
 			const canvas = canvasRef.current;
-			const context = canvas?.getContext("2d");
+			const context = canvas?.getContext("2d", { willReadFrequently: true });
 			if (!canvas || !context) throw new Error("Canvas editing is not available in this browser");
 			// A 48 MP source would allocate hundreds of MB and crash mobile
 			// browsers; cap the editable canvas at a safe resolution instead.
@@ -76,6 +93,13 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			canvas.height = Math.max(1, Math.round(originalImage.naturalHeight * editScale));
 			originalImageRef.current = originalImage;
 			cutoutImageRef.current = cutoutImage;
+			const originalCanvas = document.createElement("canvas");
+			originalCanvas.width = canvas.width;
+			originalCanvas.height = canvas.height;
+			const originalContext = originalCanvas.getContext("2d", { willReadFrequently: true });
+			if (!originalContext) throw new Error("Magic selection is not available in this browser");
+			originalContext.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+			originalPixelsRef.current = originalContext.getImageData(0, 0, canvas.width, canvas.height);
 			context.drawImage(cutoutImage, 0, 0, canvas.width, canvas.height);
 			setLoading(false);
 		};
@@ -92,15 +116,17 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 	}, [job.cutoutUrl, job.originalUrl]);
 
 	const handleUndo = useCallback(() => {
-		setStrokes((current) => {
+		setEdits((current) => {
 			const next = current.slice(0, -1);
 			redraw(next);
+			setMagicResult(undefined);
 			return next;
 		});
 	}, [redraw]);
 
 	const handleReset = useCallback(() => {
-		setStrokes([]);
+		setEdits([]);
+		setMagicResult(undefined);
 		redraw([]);
 	}, [redraw]);
 
@@ -135,7 +161,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			const cursor = brushCursorRef.current;
 			const viewport = viewportRef.current;
 			const canvas = canvasRef.current;
-			if (!cursor || !viewport || !canvas || loading || error || panToolActive || spacePanActive || panGestureRef.current) {
+			if (!cursor || !viewport || !canvas || loading || error || selectionMethod === "magic" || panToolActive || spacePanActive || panGestureRef.current) {
 				if (cursor) cursor.style.opacity = "0";
 				return;
 			}
@@ -161,7 +187,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			cursor.style.height = `${preview.diameter}px`;
 			cursor.style.opacity = "1";
 		},
-		[brushSize, error, loading, panToolActive, spacePanActive],
+		[brushSize, error, loading, panToolActive, selectionMethod, spacePanActive],
 	);
 
 	const hideBrushPreview = useCallback(() => {
@@ -268,8 +294,9 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			const viewport = viewportRef.current;
 			const context = canvas?.getContext("2d");
 			const originalImage = originalImageRef.current;
+			const originalPixels = originalPixelsRef.current;
 			const point = pointFromPointer(event.clientX, event.clientY);
-			if (!canvas || !viewport || !context || !originalImage || !point || loading || error) return;
+			if (!canvas || !viewport || !context || !originalImage || !originalPixels || !point || loading || error) return;
 
 			const shouldPan = (event.button === 0 && (panToolActive || spacePanRef.current)) || event.button === 1;
 			if (shouldPan) {
@@ -289,13 +316,25 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			if (event.button !== 0) return;
 
 			event.preventDefault();
+			const editTool = event.altKey ? oppositeEditorTool(tool) : tool;
+			if (selectionMethod === "magic") {
+				const selection: EditorMagicSelection = { kind: "magic", tool: editTool, point, tolerance: magicTolerance };
+				const changedPixels = applyMagicSelection(context, selection, originalPixels);
+				if (changedPixels) {
+					setEdits((current) => [...current, selection]);
+					setMagicResult(`${changedPixels.toLocaleString()} pixel${changedPixels === 1 ? "" : "s"} ${editTool === "erase" ? "made transparent" : "restored"}`);
+				} else {
+					setMagicResult(editTool === "erase" ? "No visible matching pixels found" : "No missing matching pixels found");
+				}
+				return;
+			}
+
 			canvas.setPointerCapture(event.pointerId);
-			const strokeTool = event.altKey ? oppositeEditorTool(tool) : tool;
-			const stroke: EditorStroke = { tool: strokeTool, size: brushSize, strength: strength / 100, points: [point] };
+			const stroke: EditorStroke = { tool: editTool, size: brushSize, strength: strength / 100, points: [point] };
 			activeStrokeRef.current = stroke;
 			drawEditorStroke(context, stroke, originalImage);
 		},
-		[brushSize, error, loading, panToolActive, pointFromPointer, strength, tool, updateBrushPreview],
+		[brushSize, error, loading, magicTolerance, panToolActive, pointFromPointer, selectionMethod, strength, tool, updateBrushPreview],
 	);
 
 	const handlePointerMove = useCallback(
@@ -337,7 +376,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			const activeStroke = activeStrokeRef.current;
 			if (!activeStroke) return;
 			if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-			setStrokes((current) => [...current, { ...activeStroke, points: [...activeStroke.points] }]);
+			setEdits((current) => [...current, { ...activeStroke, points: [...activeStroke.points] }]);
 			activeStrokeRef.current = null;
 		},
 		[updateBrushPreview],
@@ -381,7 +420,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 							Editor workspace
 						</Badge>
 					</div>
-					<p className="truncate text-xs text-muted-foreground">Paint the mask to restore missing details or erase leftover background.</p>
+					<p className="truncate text-xs text-muted-foreground">Brush or select regions to restore details and remove leftover background.</p>
 				</div>
 				<ThemeToggle />
 			</header>
@@ -389,7 +428,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			<div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[17rem_minmax(0,1fr)] lg:overflow-hidden">
 				<aside className="order-2 flex flex-col gap-5 border-t border-border bg-card p-4 lg:order-1 lg:min-h-0 lg:overflow-y-auto lg:border-r lg:border-t-0">
 					<div>
-						<p className="mb-2 text-xs font-semibold">Brush action</p>
+						<p className="mb-2 text-xs font-semibold">Edit action</p>
 						<div className="grid grid-cols-2 gap-2">
 							{(
 								[
@@ -416,51 +455,110 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 							))}
 						</div>
 						<p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-							{tool === "restore" ? "Paint pixels from the original photo back into the cutout." : "Remove pixels from the cutout to create transparent space."}
+							{tool === "restore" ? "Bring pixels from the original photo back into the cutout." : "Remove pixels from the cutout to create transparent space."}
 						</p>
 						<Button type="button" variant="outline" size="sm" className="mt-3 w-full" onClick={() => setTool((current) => oppositeEditorTool(current))}>
 							<ArrowLeftRight data-icon="inline-start" aria-hidden="true" />
 							Switch to {tool === "restore" ? "transparent" : "restore"}
 						</Button>
-						<p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Tip: hold Alt while painting to temporarily use the opposite action.</p>
+						<p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Tip: hold Alt while painting or selecting to temporarily use the opposite action.</p>
 					</div>
 
-					<label className="grid gap-2 text-xs font-medium">
-						<span className="flex items-center justify-between gap-3">
-							Brush size <output className="font-mono text-[10px] text-muted-foreground">{brushSize}px</output>
-						</span>
-						<input
-							type="range"
-							min={8}
-							max={240}
-							step={4}
-							value={brushSize}
-							onChange={(event) => setBrushSize(Number(event.target.value))}
-							className="w-full cursor-pointer accent-primary"
-						/>
-					</label>
+					<div>
+						<p className="mb-2 text-xs font-semibold">Selection method</p>
+						<div className="grid grid-cols-2 gap-2">
+							{(
+								[
+									{ value: "brush", label: "Brush", icon: Paintbrush },
+									{ value: "magic", label: "Magic selector", icon: WandSparkles },
+								] as const
+							).map(({ value, label, icon: Icon }) => (
+								<button
+									key={value}
+									type="button"
+									aria-pressed={selectionMethod === value}
+									onClick={() => {
+										setSelectionMethod(value);
+										setPanToolActive(false);
+										setMagicResult(undefined);
+									}}
+									className={cn(
+										"flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border p-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+										selectionMethod === value ? "border-primary bg-primary/10 text-primary" : "bg-background hover:border-primary/50 hover:bg-[var(--control-hover)]",
+									)}
+								>
+									<Icon className="size-4" aria-hidden="true" />
+									{label}
+								</button>
+							))}
+						</div>
+						<p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+							{selectionMethod === "brush" ? "Drag to edit continuously with the selected brush action." : "Click once to edit a connected region with similar colors."}
+						</p>
+					</div>
 
-					<label className="grid gap-2 text-xs font-medium">
-						<span className="flex items-center justify-between gap-3">
-							Strength <output className="font-mono text-[10px] text-muted-foreground">{strength}%</output>
-						</span>
-						<input
-							type="range"
-							min={10}
-							max={100}
-							step={5}
-							value={strength}
-							onChange={(event) => setStrength(Number(event.target.value))}
-							className="w-full cursor-pointer accent-primary"
-						/>
-					</label>
+					{selectionMethod === "brush" ? (
+						<>
+							<label className="grid gap-2 text-xs font-medium">
+								<span className="flex items-center justify-between gap-3">
+									Brush size <output className="font-mono text-[10px] text-muted-foreground">{brushSize}px</output>
+								</span>
+								<input
+									type="range"
+									min={8}
+									max={240}
+									step={4}
+									value={brushSize}
+									onChange={(event) => setBrushSize(Number(event.target.value))}
+									className="w-full cursor-pointer accent-primary"
+								/>
+							</label>
+
+							<label className="grid gap-2 text-xs font-medium">
+								<span className="flex items-center justify-between gap-3">
+									Strength <output className="font-mono text-[10px] text-muted-foreground">{strength}%</output>
+								</span>
+								<input
+									type="range"
+									min={10}
+									max={100}
+									step={5}
+									value={strength}
+									onChange={(event) => setStrength(Number(event.target.value))}
+									className="w-full cursor-pointer accent-primary"
+								/>
+							</label>
+						</>
+					) : (
+						<label className="grid gap-2 text-xs font-medium">
+							<span className="flex items-center justify-between gap-3">
+								Color tolerance <output className="font-mono text-[10px] text-muted-foreground">{magicTolerance}%</output>
+							</span>
+							<input
+								type="range"
+								aria-label="Magic selection color tolerance"
+								min={0}
+								max={100}
+								step={1}
+								value={magicTolerance}
+								onChange={(event) => {
+									setMagicTolerance(Number(event.target.value));
+									setMagicResult(undefined);
+								}}
+								className="w-full cursor-pointer accent-primary"
+							/>
+							<span aria-live="polite" className="text-[10px] font-normal leading-relaxed text-muted-foreground">
+								{magicResult ?? "Lower selects closer colors; higher includes a broader connected area."}
+							</span>
+						</label>
+					)}
 
 					<div className="grid grid-cols-2 gap-2">
-						<Button type="button" variant="outline" size="sm" disabled={!strokes.length || loading} onClick={handleUndo}>
+						<Button type="button" variant="outline" size="sm" disabled={!edits.length || loading} onClick={handleUndo}>
 							<Undo2 data-icon="inline-start" aria-hidden="true" />
 							Undo
 						</Button>
-						<Button type="button" variant="outline" size="sm" disabled={!strokes.length || loading} onClick={handleReset}>
+						<Button type="button" variant="outline" size="sm" disabled={!edits.length || loading} onClick={handleReset}>
 							<RotateCcw data-icon="inline-start" aria-hidden="true" />
 							Reset
 						</Button>
@@ -489,7 +587,9 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 								aria-label={`Editable background removal mask for ${job.name}`}
 								className={cn(
 									"m-auto h-auto max-w-none touch-none border border-border bg-transparent shadow-lg",
-									!loading && !error && (panning ? "cursor-grabbing" : panToolActive || spacePanActive ? "cursor-grab" : "cursor-none"),
+									!loading &&
+										!error &&
+										(panning ? "cursor-grabbing" : panToolActive || spacePanActive ? "cursor-grab" : selectionMethod === "magic" ? "cursor-crosshair" : "cursor-none"),
 								)}
 								// A canvas is a replaced flex item. Without this, flexbox
 								// shrinks high zoom levels back to its intrinsic pixel width.
@@ -576,7 +676,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 							Wheel zoom · Space + drag pan · {MIN_EDITOR_ZOOM}–{MAX_EDITOR_ZOOM}%
 						</p>
 						<p className="min-w-0 flex-1 text-right text-[11px] text-muted-foreground">
-							{strokes.length ? `${strokes.length} edit${strokes.length === 1 ? "" : "s"}` : "No manual edits"}
+							{edits.length ? `${edits.length} edit${edits.length === 1 ? "" : "s"}` : "No manual edits"}
 						</p>
 					</div>
 				</div>
@@ -587,7 +687,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 				<Button type="button" variant="outline" onClick={onClose}>
 					Cancel
 				</Button>
-				<Button type="button" disabled={loading || saving || !strokes.length || Boolean(error)} onClick={handleSave}>
+				<Button type="button" disabled={loading || saving || !edits.length || Boolean(error)} onClick={handleSave}>
 					{saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden="true" /> : <Save data-icon="inline-start" aria-hidden="true" />}
 					{saving ? "Saving…" : "Save refinement"}
 				</Button>
