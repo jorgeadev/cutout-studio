@@ -10,7 +10,7 @@ blockExoticSubdeps: true
 overrides:
   # IMG.LY 1.7.0 pins 1.21.0, but the local patch loads version-matched runtime assets.
   '@imgly/background-removal@1.7.0>onnxruntime-web': 1.27.0
-  nanoid: 3.3.17
+  nanoid: 3.3.18
 allowBuilds:
   protobufjs: false
 patchedDependencies:
