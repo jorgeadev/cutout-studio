@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { canvasPointFromClient, drawEditorStroke, encodeCanvasPng } from "@/lib/mask-editor";
+import { brushPreviewFromClient, canvasPointFromClient, clampEditorZoom, drawEditorStroke, editorZoomFromWheel, encodeCanvasPng, MAX_EDITOR_ZOOM, MIN_EDITOR_ZOOM } from "@/lib/mask-editor";
 
 const createContext = () => {
 	const pattern = {} as CanvasPattern;
@@ -29,6 +29,44 @@ describe("mask editor coordinates", () => {
 	it("clamps points to the canvas and handles collapsed bounds", () => {
 		expect(canvasPointFromClient(-20, 200, { left: 10, top: 20, width: 100, height: 50 }, 1000, 500)).toEqual({ x: 0, y: 500 });
 		expect(canvasPointFromClient(50, 50, { left: 0, top: 0, width: 0, height: 0 }, 1000, 500)).toEqual({ x: 0, y: 0 });
+	});
+});
+
+describe("mask editor zoom", () => {
+	it("zooms smoothly in the expected wheel direction", () => {
+		expect(editorZoomFromWheel(100, -100)).toBe(116);
+		expect(editorZoomFromWheel(100, 100)).toBe(86);
+		expect(editorZoomFromWheel(100, -1, 1)).toBe(102);
+	});
+
+	it("keeps wheel and direct zoom values within the editor limits", () => {
+		expect(editorZoomFromWheel(MAX_EDITOR_ZOOM, -10_000)).toBe(MAX_EDITOR_ZOOM);
+		expect(editorZoomFromWheel(MIN_EDITOR_ZOOM, 10_000)).toBe(MIN_EDITOR_ZOOM);
+		expect(clampEditorZoom(Number.NaN)).toBe(100);
+		expect(clampEditorZoom(250.6)).toBe(251);
+	});
+});
+
+describe("mask brush preview", () => {
+	it("matches the rendered brush diameter and accounts for viewport scrolling", () => {
+		expect(
+			brushPreviewFromClient(
+				340,
+				230,
+				{ left: 100, top: 50, width: 800, height: 600 },
+				{ left: 140, top: 80, width: 400, height: 300 },
+				200,
+				100,
+				1000,
+				64,
+			),
+		).toEqual({ diameter: 25.6, left: 440, top: 280 });
+	});
+
+	it("hides the brush outside the canvas or when the canvas is collapsed", () => {
+		const viewport = { left: 0, top: 0, width: 500, height: 500 };
+		expect(brushPreviewFromClient(10, 10, viewport, { left: 20, top: 20, width: 400, height: 400 }, 0, 0, 1000, 64)).toBeNull();
+		expect(brushPreviewFromClient(20, 20, viewport, { left: 20, top: 20, width: 0, height: 0 }, 0, 0, 1000, 64)).toBeNull();
 	});
 });
 

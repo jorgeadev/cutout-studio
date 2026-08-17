@@ -4,6 +4,39 @@ const clamp = (value: number, minimum: number, maximum: number): number => {
 	return Math.max(minimum, Math.min(maximum, value));
 };
 
+export const MIN_EDITOR_ZOOM = 25;
+export const MAX_EDITOR_ZOOM = 400;
+
+export const clampEditorZoom = (zoom: number): number => {
+	return clamp(Math.round(Number.isFinite(zoom) ? zoom : 100), MIN_EDITOR_ZOOM, MAX_EDITOR_ZOOM);
+};
+
+export const editorZoomFromWheel = (currentZoom: number, deltaY: number, deltaMode = 0): number => {
+	if (!Number.isFinite(deltaY) || deltaY === 0) return clampEditorZoom(currentZoom);
+	const deltaScale = deltaMode === 1 ? 16 : deltaMode === 2 ? 800 : 1;
+	return clampEditorZoom(currentZoom * Math.exp(-deltaY * deltaScale * 0.0015));
+};
+
+export const brushPreviewFromClient = (
+	clientX: number,
+	clientY: number,
+	viewportBounds: CanvasBounds,
+	canvasBounds: CanvasBounds,
+	viewportScrollLeft: number,
+	viewportScrollTop: number,
+	canvasWidth: number,
+	brushSize: number,
+): { diameter: number; left: number; top: number } | null => {
+	const insideCanvas = clientX >= canvasBounds.left && clientX <= canvasBounds.left + canvasBounds.width && clientY >= canvasBounds.top && clientY <= canvasBounds.top + canvasBounds.height;
+	if (!insideCanvas || canvasWidth <= 0 || canvasBounds.width <= 0) return null;
+
+	return {
+		diameter: Math.max(4, brushSize * (canvasBounds.width / canvasWidth)),
+		left: clientX - viewportBounds.left + viewportScrollLeft,
+		top: clientY - viewportBounds.top + viewportScrollTop,
+	};
+};
+
 export const canvasPointFromClient = (clientX: number, clientY: number, bounds: CanvasBounds, canvasWidth: number, canvasHeight: number): EditorPoint => {
 	const normalizedX = bounds.width > 0 ? (clientX - bounds.left) / bounds.width : 0;
 	const normalizedY = bounds.height > 0 ? (clientY - bounds.top) / bounds.height : 0;

@@ -1,17 +1,22 @@
 import { Eraser, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, WandSparkles, X, ZoomIn, ZoomOut } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { loadImage, MAX_CANVAS_SIDE } from "@/lib/image-utils";
-import { canvasPointFromClient, drawEditorStroke, encodeCanvasPng } from "@/lib/mask-editor";
+import { brushPreviewFromClient, canvasPointFromClient, clampEditorZoom, drawEditorStroke, editorZoomFromWheel, encodeCanvasPng, MAX_EDITOR_ZOOM, MIN_EDITOR_ZOOM } from "@/lib/mask-editor";
 import { cn } from "@/lib/utils";
 import type { EditorStroke, MaskEditorProps, MaskEditorTool } from "@/types/editor";
 
 export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps) => {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const viewportRef = useRef<HTMLDivElement>(null);
+	const brushCursorRef = useRef<HTMLDivElement>(null);
 	const originalImageRef = useRef<HTMLImageElement>(null);
 	const cutoutImageRef = useRef<HTMLImageElement>(null);
 	const activeStrokeRef = useRef<EditorStroke>(null);
+	const lastPointerRef = useRef<{ clientX: number; clientY: number }>(null);
+	const zoomRef = useRef(100);
+	const pendingZoomAnchorRef = useRef<{ clientX: number; clientY: number; relativeX: number; relativeY: number }>(null);
 	const [tool, setTool] = useState<MaskEditorTool>("restore");
 	const [brushSize, setBrushSize] = useState(64);
 	const [strength, setStrength] = useState(100);
@@ -106,8 +111,103 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 		return canvasPointFromClient(clientX, clientY, canvas.getBoundingClientRect(), canvas.width, canvas.height);
 	}, []);
 
+	const updateBrushPreview = useCallback(
+		(clientX: number, clientY: number) => {
+			lastPointerRef.current = { clientX, clientY };
+			const cursor = brushCursorRef.current;
+			const viewport = viewportRef.current;
+			const canvas = canvasRef.current;
+			if (!cursor || !viewport || !canvas || loading || error) {
+				if (cursor) cursor.style.opacity = "0";
+				return;
+			}
+
+			const preview = brushPreviewFromClient(
+				clientX,
+				clientY,
+				viewport.getBoundingClientRect(),
+				canvas.getBoundingClientRect(),
+				viewport.scrollLeft,
+				viewport.scrollTop,
+				canvas.width,
+				brushSize,
+			);
+			if (!preview) {
+				cursor.style.opacity = "0";
+				return;
+			}
+
+			cursor.style.left = `${preview.left}px`;
+			cursor.style.top = `${preview.top}px`;
+			cursor.style.width = `${preview.diameter}px`;
+			cursor.style.height = `${preview.diameter}px`;
+			cursor.style.opacity = "1";
+		},
+		[brushSize, error, loading],
+	);
+
+	const hideBrushPreview = useCallback(() => {
+		lastPointerRef.current = null;
+		if (brushCursorRef.current) brushCursorRef.current.style.opacity = "0";
+	}, []);
+
+	const setEditorZoom = useCallback((requestedZoom: number, clientX?: number, clientY?: number) => {
+		const nextZoom = clampEditorZoom(requestedZoom);
+		if (nextZoom === zoomRef.current) return;
+
+		const viewport = viewportRef.current;
+		const canvas = canvasRef.current;
+		if (viewport && canvas) {
+			const viewportBounds = viewport.getBoundingClientRect();
+			const canvasBounds = canvas.getBoundingClientRect();
+			const anchorClientX = clientX ?? viewportBounds.left + viewportBounds.width / 2;
+			const anchorClientY = clientY ?? viewportBounds.top + viewportBounds.height / 2;
+			pendingZoomAnchorRef.current = {
+				clientX: anchorClientX,
+				clientY: anchorClientY,
+				relativeX: canvasBounds.width > 0 ? Math.max(0, Math.min(1, (anchorClientX - canvasBounds.left) / canvasBounds.width)) : 0.5,
+				relativeY: canvasBounds.height > 0 ? Math.max(0, Math.min(1, (anchorClientY - canvasBounds.top) / canvasBounds.height)) : 0.5,
+			};
+		}
+
+		zoomRef.current = nextZoom;
+		setZoom(nextZoom);
+	}, []);
+
+	useLayoutEffect(() => {
+		const anchor = pendingZoomAnchorRef.current;
+		const viewport = viewportRef.current;
+		const canvas = canvasRef.current;
+		if (anchor && viewport && canvas && zoom === zoomRef.current) {
+			const canvasBounds = canvas.getBoundingClientRect();
+			viewport.scrollLeft += canvasBounds.left + canvasBounds.width * anchor.relativeX - anchor.clientX;
+			viewport.scrollTop += canvasBounds.top + canvasBounds.height * anchor.relativeY - anchor.clientY;
+		}
+		pendingZoomAnchorRef.current = null;
+
+		const pointer = lastPointerRef.current;
+		if (pointer) updateBrushPreview(pointer.clientX, pointer.clientY);
+	}, [updateBrushPreview, zoom]);
+
+	const handleWheelZoom = useCallback(
+		(event: WheelEvent) => {
+			if (loading || error || event.deltaY === 0) return;
+			event.preventDefault();
+			setEditorZoom(editorZoomFromWheel(zoomRef.current, event.deltaY, event.deltaMode), event.clientX, event.clientY);
+		},
+		[error, loading, setEditorZoom],
+	);
+
+	useEffect(() => {
+		const viewport = viewportRef.current;
+		if (!viewport) return;
+		viewport.addEventListener("wheel", handleWheelZoom, { passive: false });
+		return () => viewport.removeEventListener("wheel", handleWheelZoom);
+	}, [handleWheelZoom]);
+
 	const handlePointerDown = useCallback(
 		(event: React.PointerEvent<HTMLCanvasElement>) => {
+			updateBrushPreview(event.clientX, event.clientY);
 			const canvas = canvasRef.current;
 			const context = canvas?.getContext("2d");
 			const originalImage = originalImageRef.current;
@@ -120,11 +220,12 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			activeStrokeRef.current = stroke;
 			drawEditorStroke(context, stroke, originalImage);
 		},
-		[brushSize, error, loading, pointFromPointer, strength, tool],
+		[brushSize, error, loading, pointFromPointer, strength, tool, updateBrushPreview],
 	);
 
 	const handlePointerMove = useCallback(
 		(event: React.PointerEvent<HTMLCanvasElement>) => {
+			updateBrushPreview(event.clientX, event.clientY);
 			const activeStroke = activeStrokeRef.current;
 			const canvas = canvasRef.current;
 			const context = canvas?.getContext("2d");
@@ -137,7 +238,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			activeStroke.points.push(point);
 			drawEditorStroke(context, { ...activeStroke, points: [previousPoint, point] }, originalImage);
 		},
-		[pointFromPointer],
+		[pointFromPointer, updateBrushPreview],
 	);
 
 	const finishStroke = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -278,14 +379,16 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 					</aside>
 
 					<div className="order-1 flex min-h-60 min-w-0 flex-col bg-muted/30 lg:order-2 lg:min-h-0">
-						<div className="checkerboard relative min-h-0 flex-1 overflow-auto">
+						<div ref={viewportRef} className="checkerboard relative min-h-0 flex-1 overflow-auto" title="Use the mouse wheel to zoom">
 							<div className="flex min-h-full min-w-full items-center justify-center p-4 sm:p-6">
 								<canvas
 									ref={canvasRef}
 									aria-label={`Editable background removal mask for ${job.name}`}
-									className={cn("h-auto max-w-none touch-none border border-border bg-transparent shadow-lg", !loading && !error && "cursor-crosshair")}
+									className={cn("h-auto max-w-none touch-none border border-border bg-transparent shadow-lg", !loading && !error && "cursor-none")}
 									style={{ width: `${zoom}%` }}
 									onPointerDown={handlePointerDown}
+									onPointerEnter={(event) => updateBrushPreview(event.clientX, event.clientY)}
+									onPointerLeave={hideBrushPreview}
 									onPointerMove={handlePointerMove}
 									onPointerUp={finishStroke}
 									onPointerCancel={finishStroke}
@@ -293,6 +396,14 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 									Your browser does not support canvas editing.
 								</canvas>
 							</div>
+							<div
+								ref={brushCursorRef}
+								aria-hidden="true"
+								className={cn(
+									"pointer-events-none absolute z-20 box-border -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/95 bg-white/25 opacity-0 shadow-[0_0_0_1px_rgba(0,0,0,0.9),0_2px_8px_rgba(0,0,0,0.35)] transition-[width,height,opacity] duration-75 after:absolute after:top-1/2 after:left-1/2 after:size-1 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:shadow-[0_0_0_1px_rgba(255,255,255,0.95)]",
+									tool === "erase" ? "after:bg-destructive" : "after:bg-primary",
+								)}
+							/>
 							{loading ? (
 								<div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/75 backdrop-blur-sm">
 									<LoaderCircle className="size-5 animate-spin text-primary" aria-hidden="true" />
@@ -303,24 +414,25 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 
 						<div className="flex flex-wrap items-center gap-2 border-t border-border bg-card px-3 py-2.5 sm:px-4">
 							<div className="flex items-center gap-1">
-								<Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom out" disabled={zoom <= 25} onClick={() => setZoom((current) => Math.max(25, current - 25))}>
+								<Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom out" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => setEditorZoom(zoomRef.current - 25)}>
 									<ZoomOut aria-hidden="true" />
 								</Button>
 								<input
 									type="range"
 									aria-label="Canvas zoom"
-									min={25}
-									max={200}
-									step={25}
+									min={MIN_EDITOR_ZOOM}
+									max={MAX_EDITOR_ZOOM}
+									step={1}
 									value={zoom}
-									onChange={(event) => setZoom(Number(event.target.value))}
+									onChange={(event) => setEditorZoom(Number(event.target.value))}
 									className="w-24 cursor-pointer accent-primary sm:w-32"
 								/>
-								<Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom in" disabled={zoom >= 200} onClick={() => setZoom((current) => Math.min(200, current + 25))}>
+								<Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom in" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => setEditorZoom(zoomRef.current + 25)}>
 									<ZoomIn aria-hidden="true" />
 								</Button>
 								<output className="w-10 text-right font-mono text-[10px] text-muted-foreground">{zoom}%</output>
 							</div>
+							<p className="hidden text-[11px] text-muted-foreground sm:block">Mouse wheel to zoom</p>
 							<p className="min-w-0 flex-1 text-right text-[11px] text-muted-foreground">
 								{strokes.length ? `${strokes.length} edit${strokes.length === 1 ? "" : "s"}` : "No manual edits"}
 							</p>
