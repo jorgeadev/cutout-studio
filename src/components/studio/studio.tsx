@@ -30,6 +30,7 @@ const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 15 * 1000;
 const SETTINGS_KEY = "cutout-studio-settings";
 const LEGACY_SETTINGS_KEY = "cutout-settings";
+const EDITOR_HISTORY_KEY = "cutoutStudioEditor";
 const EMPTY_DOWNLOAD: ModelDownloadState = { status: "idle", progress: 0 };
 
 const safeObjectUrl = (blob: Blob): string | undefined => {
@@ -82,6 +83,15 @@ export const Studio = () => {
 			// are optional and must never take the app down with them.
 		}
 	}, [background, exportConfig, processing]);
+
+	useEffect(() => {
+		const handlePopState = (event: PopStateEvent) => {
+			const state = event.state && typeof event.state === "object" ? (event.state as Record<string, unknown>) : undefined;
+			setEditingJobId(typeof state?.[EDITOR_HISTORY_KEY] === "string" ? state[EDITOR_HISTORY_KEY] : undefined);
+		};
+		window.addEventListener("popstate", handlePopState);
+		return () => window.removeEventListener("popstate", handlePopState);
+	}, []);
 
 	const patchJob = useCallback((id: string, patch: Partial<ImageJob>) => {
 		setJobs((current) => current.map((job) => (job.id === id ? { ...job, ...patch } : job)));
@@ -280,33 +290,43 @@ export const Studio = () => {
 	}, [background, doneJobs, exportConfig]);
 
 	const handleEdit = useCallback((job: ImageJob) => {
+		const currentState = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+		window.history.pushState({ ...currentState, [EDITOR_HISTORY_KEY]: job.id }, "");
 		setEditingJobId(job.id);
 	}, []);
 
-	const handleSaveRefinement = useCallback((id: string, blob: Blob) => {
-		const cutoutUrl = safeObjectUrl(blob);
-		if (!cutoutUrl) {
-			toast.error("Could not save the refinement because the device ran out of memory.");
-			return;
-		}
-		setJobs((current) => {
-			if (!current.some((job) => job.id === id)) {
-				URL.revokeObjectURL(cutoutUrl);
-				return current;
-			}
-			return current.map((job) => {
-				if (job.id !== id) return job;
-				if (job.cutoutUrl) URL.revokeObjectURL(job.cutoutUrl);
-				return { ...job, cutoutUrl, manuallyEdited: true };
-			});
-		});
-		setEditingJobId(undefined);
-		toast.success("Manual refinement saved");
+	const handleCloseEditor = useCallback(() => {
+		const state = window.history.state && typeof window.history.state === "object" ? (window.history.state as Record<string, unknown>) : undefined;
+		if (typeof state?.[EDITOR_HISTORY_KEY] === "string") window.history.back();
+		else setEditingJobId(undefined);
 	}, []);
+
+	const handleSaveRefinement = useCallback(
+		(id: string, blob: Blob) => {
+			const cutoutUrl = safeObjectUrl(blob);
+			if (!cutoutUrl) {
+				toast.error("Could not save the refinement because the device ran out of memory.");
+				return;
+			}
+			setJobs((current) => {
+				if (!current.some((job) => job.id === id)) {
+					URL.revokeObjectURL(cutoutUrl);
+					return current;
+				}
+				return current.map((job) => {
+					if (job.id !== id) return job;
+					if (job.cutoutUrl) URL.revokeObjectURL(job.cutoutUrl);
+					return { ...job, cutoutUrl, manuallyEdited: true };
+				});
+			});
+			handleCloseEditor();
+			toast.success("Manual refinement saved");
+		},
+		[handleCloseEditor],
+	);
 
 	const handleImprove = useCallback(
 		(id: string) => {
-			setEditingJobId(undefined);
 			setJobs((current) =>
 				current.map((job) => {
 					if (job.id !== id) return job;
@@ -326,9 +346,10 @@ export const Studio = () => {
 					};
 				}),
 			);
+			handleCloseEditor();
 			toast.message("AI Precision queued", { description: "Using the full 32-bit model with sharpened hair and fine edges." });
 		},
-		[processing.device],
+		[handleCloseEditor, processing.device],
 	);
 
 	const handleRemove = useCallback((id: string) => {
@@ -375,6 +396,10 @@ export const Studio = () => {
 			return [];
 		});
 	}, []);
+
+	if (editingJob) {
+		return <MaskEditor job={editingJob} onClose={handleCloseEditor} onImprove={handleImprove} onSave={handleSaveRefinement} />;
+	}
 
 	return (
 		<div className="min-h-dvh overflow-x-hidden bg-background">
@@ -636,8 +661,6 @@ export const Studio = () => {
 					</div>
 				</div>
 			</footer>
-
-			{editingJob ? <MaskEditor job={editingJob} onClose={() => setEditingJobId(undefined)} onImprove={handleImprove} onSave={handleSaveRefinement} /> : null}
 		</div>
 	);
 };
