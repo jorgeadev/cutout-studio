@@ -28,6 +28,18 @@ export const fitEditorZoom = (viewportWidth: number, viewportHeight: number, can
 
 export const oppositeEditorTool = (tool: MaskEditorTool): MaskEditorTool => (tool === "restore" ? "erase" : "restore");
 
+export const panScrollFromDrag = (
+	startScrollLeft: number,
+	startScrollTop: number,
+	startClientX: number,
+	startClientY: number,
+	clientX: number,
+	clientY: number,
+): { left: number; top: number } => ({
+	left: Math.max(0, startScrollLeft - (clientX - startClientX)),
+	top: Math.max(0, startScrollTop - (clientY - startClientY)),
+});
+
 export const brushPreviewFromClient = (
 	clientX: number,
 	clientY: number,

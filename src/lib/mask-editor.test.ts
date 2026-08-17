@@ -10,6 +10,7 @@ import {
 	MAX_EDITOR_ZOOM,
 	MIN_EDITOR_ZOOM,
 	oppositeEditorTool,
+	panScrollFromDrag,
 } from "@/lib/mask-editor";
 
 const createContext = () => {
@@ -61,6 +62,13 @@ describe("mask editor zoom", () => {
 		expect(fitEditorZoom(1200, 800, 1600, 900)).toBe(100);
 		expect(fitEditorZoom(1200, 800, 800, 1000)).toBe(52);
 		expect(fitEditorZoom(0, 800, 800, 1000)).toBe(100);
+	});
+});
+
+describe("mask editor panning", () => {
+	it("translates pointer dragging into scroll offsets", () => {
+		expect(panScrollFromDrag(240, 120, 100, 100, 60, 40)).toEqual({ left: 280, top: 180 });
+		expect(panScrollFromDrag(20, 10, 100, 100, 160, 180)).toEqual({ left: 0, top: 0 });
 	});
 });
 

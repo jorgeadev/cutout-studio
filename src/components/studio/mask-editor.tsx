@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowLeftRight, Eraser, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Eraser, Hand, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ThemeToggle } from "@/components/studio/theme-toggle";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import {
 	MAX_EDITOR_ZOOM,
 	MIN_EDITOR_ZOOM,
 	oppositeEditorTool,
+	panScrollFromDrag,
 } from "@/lib/mask-editor";
 import { cn } from "@/lib/utils";
 import type { EditorStroke, MaskEditorProps, MaskEditorTool } from "@/types/editor";
@@ -26,13 +27,18 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 	const originalImageRef = useRef<HTMLImageElement>(null);
 	const cutoutImageRef = useRef<HTMLImageElement>(null);
 	const activeStrokeRef = useRef<EditorStroke>(null);
+	const panGestureRef = useRef<{ pointerId: number; clientX: number; clientY: number; scrollLeft: number; scrollTop: number }>(null);
 	const lastPointerRef = useRef<{ clientX: number; clientY: number }>(null);
+	const spacePanRef = useRef(false);
 	const zoomRef = useRef(100);
 	const pendingZoomAnchorRef = useRef<{ clientX: number; clientY: number; relativeX: number; relativeY: number }>(null);
 	const [tool, setTool] = useState<MaskEditorTool>("restore");
 	const [brushSize, setBrushSize] = useState(64);
 	const [strength, setStrength] = useState(100);
 	const [zoom, setZoom] = useState(100);
+	const [panToolActive, setPanToolActive] = useState(false);
+	const [spacePanActive, setSpacePanActive] = useState(false);
+	const [panning, setPanning] = useState(false);
 	const [strokes, setStrokes] = useState<EditorStroke[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -129,7 +135,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			const cursor = brushCursorRef.current;
 			const viewport = viewportRef.current;
 			const canvas = canvasRef.current;
-			if (!cursor || !viewport || !canvas || loading || error) {
+			if (!cursor || !viewport || !canvas || loading || error || panToolActive || spacePanActive || panGestureRef.current) {
 				if (cursor) cursor.style.opacity = "0";
 				return;
 			}
@@ -155,12 +161,43 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			cursor.style.height = `${preview.diameter}px`;
 			cursor.style.opacity = "1";
 		},
-		[brushSize, error, loading],
+		[brushSize, error, loading, panToolActive, spacePanActive],
 	);
 
 	const hideBrushPreview = useCallback(() => {
 		lastPointerRef.current = null;
 		if (brushCursorRef.current) brushCursorRef.current.style.opacity = "0";
+	}, []);
+
+	useEffect(() => {
+		const pointer = lastPointerRef.current;
+		if (pointer) updateBrushPreview(pointer.clientX, pointer.clientY);
+	}, [updateBrushPreview]);
+
+	useEffect(() => {
+		const isEditableTarget = (target: EventTarget | null) => target instanceof HTMLElement && (target.matches("input, textarea, select, button") || target.isContentEditable);
+		const stopSpacePan = () => {
+			spacePanRef.current = false;
+			setSpacePanActive(false);
+		};
+		const handleSpaceDown = (event: KeyboardEvent) => {
+			if (event.code !== "Space" || isEditableTarget(event.target)) return;
+			event.preventDefault();
+			spacePanRef.current = true;
+			setSpacePanActive(true);
+		};
+		const handleSpaceUp = (event: KeyboardEvent) => {
+			if (event.code === "Space") stopSpacePan();
+		};
+
+		window.addEventListener("keydown", handleSpaceDown);
+		window.addEventListener("keyup", handleSpaceUp);
+		window.addEventListener("blur", stopSpacePan);
+		return () => {
+			window.removeEventListener("keydown", handleSpaceDown);
+			window.removeEventListener("keyup", handleSpaceUp);
+			window.removeEventListener("blur", stopSpacePan);
+		};
 	}, []);
 
 	const setEditorZoom = useCallback((requestedZoom: number, clientX?: number, clientY?: number) => {
@@ -228,10 +265,28 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 		(event: React.PointerEvent<HTMLCanvasElement>) => {
 			updateBrushPreview(event.clientX, event.clientY);
 			const canvas = canvasRef.current;
+			const viewport = viewportRef.current;
 			const context = canvas?.getContext("2d");
 			const originalImage = originalImageRef.current;
 			const point = pointFromPointer(event.clientX, event.clientY);
-			if (!canvas || !context || !originalImage || !point || loading || error) return;
+			if (!canvas || !viewport || !context || !originalImage || !point || loading || error) return;
+
+			const shouldPan = (event.button === 0 && (panToolActive || spacePanRef.current)) || event.button === 1;
+			if (shouldPan) {
+				event.preventDefault();
+				canvas.setPointerCapture(event.pointerId);
+				panGestureRef.current = {
+					pointerId: event.pointerId,
+					clientX: event.clientX,
+					clientY: event.clientY,
+					scrollLeft: viewport.scrollLeft,
+					scrollTop: viewport.scrollTop,
+				};
+				setPanning(true);
+				if (brushCursorRef.current) brushCursorRef.current.style.opacity = "0";
+				return;
+			}
+			if (event.button !== 0) return;
 
 			event.preventDefault();
 			canvas.setPointerCapture(event.pointerId);
@@ -240,12 +295,21 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			activeStrokeRef.current = stroke;
 			drawEditorStroke(context, stroke, originalImage);
 		},
-		[brushSize, error, loading, pointFromPointer, strength, tool, updateBrushPreview],
+		[brushSize, error, loading, panToolActive, pointFromPointer, strength, tool, updateBrushPreview],
 	);
 
 	const handlePointerMove = useCallback(
 		(event: React.PointerEvent<HTMLCanvasElement>) => {
 			updateBrushPreview(event.clientX, event.clientY);
+			const panGesture = panGestureRef.current;
+			const viewport = viewportRef.current;
+			if (panGesture?.pointerId === event.pointerId && viewport) {
+				event.preventDefault();
+				const nextScroll = panScrollFromDrag(panGesture.scrollLeft, panGesture.scrollTop, panGesture.clientX, panGesture.clientY, event.clientX, event.clientY);
+				viewport.scrollLeft = nextScroll.left;
+				viewport.scrollTop = nextScroll.top;
+				return;
+			}
 			const activeStroke = activeStrokeRef.current;
 			const canvas = canvasRef.current;
 			const context = canvas?.getContext("2d");
@@ -261,13 +325,23 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 		[pointFromPointer, updateBrushPreview],
 	);
 
-	const finishStroke = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
-		const activeStroke = activeStrokeRef.current;
-		if (!activeStroke) return;
-		if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-		setStrokes((current) => [...current, { ...activeStroke, points: [...activeStroke.points] }]);
-		activeStrokeRef.current = null;
-	}, []);
+	const finishPointerInteraction = useCallback(
+		(event: React.PointerEvent<HTMLCanvasElement>) => {
+			if (panGestureRef.current?.pointerId === event.pointerId) {
+				panGestureRef.current = null;
+				if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+				setPanning(false);
+				updateBrushPreview(event.clientX, event.clientY);
+				return;
+			}
+			const activeStroke = activeStrokeRef.current;
+			if (!activeStroke) return;
+			if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+			setStrokes((current) => [...current, { ...activeStroke, points: [...activeStroke.points] }]);
+			activeStrokeRef.current = null;
+		},
+		[updateBrushPreview],
+	);
 
 	const handleSave = useCallback(async () => {
 		const canvas = canvasRef.current;
@@ -327,7 +401,10 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 									key={value}
 									type="button"
 									aria-pressed={tool === value}
-									onClick={() => setTool(value)}
+									onClick={() => {
+										setTool(value);
+										setPanToolActive(false);
+									}}
 									className={cn(
 										"flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border p-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 										tool === value ? "border-primary bg-primary/10 text-primary" : "bg-background hover:border-primary/50 hover:bg-[var(--control-hover)]",
@@ -405,19 +482,22 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 				</aside>
 
 				<div className="order-1 flex min-h-60 min-w-0 flex-col bg-muted/30 lg:order-2 lg:min-h-0">
-					<div ref={viewportRef} className="checkerboard relative min-h-0 flex-1 overflow-auto" title="Use the mouse wheel to zoom">
-						<div className="flex min-h-full min-w-full items-center justify-center p-4 sm:p-6">
+					<div ref={viewportRef} className="checkerboard relative min-h-0 flex-1 overflow-auto" title="Use the mouse wheel to zoom and drag with the Pan tool">
+						<div className="flex min-h-full min-w-full p-4 sm:p-6">
 							<canvas
 								ref={canvasRef}
 								aria-label={`Editable background removal mask for ${job.name}`}
-								className={cn("h-auto max-w-none touch-none border border-border bg-transparent shadow-lg", !loading && !error && "cursor-none")}
+								className={cn(
+									"m-auto h-auto max-w-none touch-none border border-border bg-transparent shadow-lg",
+									!loading && !error && (panning ? "cursor-grabbing" : panToolActive || spacePanActive ? "cursor-grab" : "cursor-none"),
+								)}
 								style={{ width: `${zoom}%` }}
 								onPointerDown={handlePointerDown}
 								onPointerEnter={(event) => updateBrushPreview(event.clientX, event.clientY)}
 								onPointerLeave={hideBrushPreview}
 								onPointerMove={handlePointerMove}
-								onPointerUp={finishStroke}
-								onPointerCancel={finishStroke}
+								onPointerUp={finishPointerInteraction}
+								onPointerCancel={finishPointerInteraction}
 							>
 								Your browser does not support canvas editing.
 							</canvas>
@@ -440,6 +520,18 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 
 					<div className="flex flex-wrap items-center gap-2 border-t border-border bg-card px-3 py-2.5 sm:px-4">
 						<div className="flex flex-wrap items-center gap-1">
+							<Button
+								type="button"
+								variant={panToolActive ? "secondary" : "outline"}
+								size="sm"
+								aria-pressed={panToolActive}
+								title="Drag the canvas. Hold Space for temporary pan."
+								disabled={loading || Boolean(error)}
+								onClick={() => setPanToolActive((current) => !current)}
+							>
+								<Hand data-icon="inline-start" aria-hidden="true" />
+								Pan
+							</Button>
 							<Button type="button" variant="outline" size="sm" disabled={loading || Boolean(error)} onClick={fitCanvasToViewport}>
 								Fit
 							</Button>
@@ -479,7 +571,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 							</label>
 						</div>
 						<p className="hidden text-[11px] text-muted-foreground md:block">
-							Mouse wheel · {MIN_EDITOR_ZOOM}–{MAX_EDITOR_ZOOM}%
+							Wheel zoom · Space + drag pan · {MIN_EDITOR_ZOOM}–{MAX_EDITOR_ZOOM}%
 						</p>
 						<p className="min-w-0 flex-1 text-right text-[11px] text-muted-foreground">
 							{strokes.length ? `${strokes.length} edit${strokes.length === 1 ? "" : "s"}` : "No manual edits"}
