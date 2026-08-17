@@ -1,12 +1,9 @@
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { FileArchive, ImageIcon } from "lucide-react";
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import type { DownloadKind, ExportOptionsProps, OutputFormat } from "@/types/export";
-
-const DOWNLOAD_KINDS = [
-	{ value: "image", label: "Result image" },
-	{ value: "project", label: "Editable .cutout project" },
-];
+import { cn } from "@/lib/utils";
+import type { ExportOptionsProps, OutputFormat } from "@/types/export";
 
 const FORMATS = [
 	{ value: "image/png", label: "PNG · lossless, keeps alpha" },
@@ -26,23 +23,41 @@ export const ExportOptions = ({ value, onChange }: ExportOptionsProps) => {
 
 	return (
 		<FieldGroup>
-			<Field>
-				<FieldLabel htmlFor="download-kind">Download as</FieldLabel>
-				<Select items={DOWNLOAD_KINDS} value={value.downloadKind} onValueChange={(next) => onChange({ ...value, downloadKind: next as DownloadKind })}>
-					<SelectTrigger id="download-kind" className="w-full">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectGroup>
-							{DOWNLOAD_KINDS.map((kind) => (
-								<SelectItem key={kind.value} value={kind.value}>
-									{kind.label}
-								</SelectItem>
-							))}
-						</SelectGroup>
-					</SelectContent>
-				</Select>
-			</Field>
+			<FieldSet className="gap-2">
+				<FieldLegend variant="label">Download all as</FieldLegend>
+				<div className="grid grid-cols-2 gap-2">
+					<button
+						type="button"
+						aria-pressed={value.downloadKind === "image"}
+						className={cn(
+							"flex min-h-20 flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors",
+							value.downloadKind === "image" ? "border-primary bg-primary/5 text-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40",
+						)}
+						onClick={() => onChange({ ...value, downloadKind: "image" })}
+					>
+						<span className="flex items-center gap-1.5 text-xs font-semibold">
+							<ImageIcon className="size-3.5" aria-hidden="true" />
+							Result images
+						</span>
+						<span className="text-[10px] leading-snug">PNG, WebP, or JPG</span>
+					</button>
+					<button
+						type="button"
+						aria-pressed={value.downloadKind === "project"}
+						className={cn(
+							"flex min-h-20 flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors",
+							value.downloadKind === "project" ? "border-primary bg-primary/5 text-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40",
+						)}
+						onClick={() => onChange({ ...value, downloadKind: "project" })}
+					>
+						<span className="flex items-center gap-1.5 text-xs font-semibold">
+							<FileArchive className="size-3.5" aria-hidden="true" />
+							Editable .cutout
+						</span>
+						<span className="text-[10px] leading-snug">Original + refined result</span>
+					</button>
+				</div>
+			</FieldSet>
 
 			{value.downloadKind === "project" ? (
 				<p className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed text-muted-foreground">

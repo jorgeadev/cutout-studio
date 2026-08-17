@@ -264,21 +264,25 @@ export const Studio = () => {
 		setEditingJobId(id);
 	}, []);
 
-	const handleDownload = useCallback(
+	const handleDownloadImage = useCallback(
 		async (job: ImageJob) => {
 			try {
-				if (exportConfig.downloadKind === "project") {
-					triggerDownload(await createProjectForJob(job), cutoutProjectFileName(job.name));
-				} else {
-					const blob = await renderJob(job, background, exportConfig);
-					triggerDownload(blob, outputFileName(job.name, exportConfig.format));
-				}
+				const blob = await renderJob(job, background, exportConfig);
+				triggerDownload(blob, outputFileName(job.name, exportConfig.format));
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Download failed");
 			}
 		},
 		[background, exportConfig],
 	);
+
+	const handleDownloadProject = useCallback(async (job: ImageJob) => {
+		try {
+			triggerDownload(await createProjectForJob(job), cutoutProjectFileName(job.name));
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Could not save the .cutout project");
+		}
+	}, []);
 
 	const handleDownloadAll = useCallback(async () => {
 		if (!doneJobs.length) return;
@@ -628,7 +632,7 @@ export const Studio = () => {
 											<div className="flex flex-wrap items-center gap-2">
 												<Button size="sm" disabled={!doneJobs.length || zipping} onClick={handleDownloadAll}>
 													<FileArchive data-icon="inline-start" aria-hidden="true" />
-													{zipping ? "Zipping…" : "Download all"}
+													{zipping ? "Zipping…" : exportConfig.downloadKind === "project" ? "Download all .cutout" : "Download all images"}
 												</Button>
 												<Button variant="outline" size="sm" onClick={handleClearAll}>
 													<Trash2 data-icon="inline-start" aria-hidden="true" />
@@ -639,7 +643,14 @@ export const Studio = () => {
 									</CardHeader>
 									<CardContent>
 										<Separator className="mb-1" />
-										<JobQueue jobs={jobs} onDownload={handleDownload} onEdit={handleEdit} onRetry={handleRetry} onRemove={handleRemove} />
+										<JobQueue
+											jobs={jobs}
+											onDownload={handleDownloadImage}
+											onDownloadProject={handleDownloadProject}
+											onEdit={handleEdit}
+											onRetry={handleRetry}
+											onRemove={handleRemove}
+										/>
 									</CardContent>
 								</Card>
 
@@ -654,7 +665,8 @@ export const Studio = () => {
 											key={job.id}
 											job={job}
 											backgroundCss={backgroundCss}
-											onDownload={handleDownload}
+											onDownload={handleDownloadImage}
+											onDownloadProject={handleDownloadProject}
 											onEdit={handleEdit}
 											onImprove={handleImprove}
 											onRetry={handleRetry}

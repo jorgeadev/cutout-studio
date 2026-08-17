@@ -27,8 +27,10 @@ describe("per-image result actions", () => {
 		const projectExport = renderToStaticMarkup(<ExportOptions value={{ ...DEFAULT_EXPORT, downloadKind: "project" }} onChange={vi.fn()} />);
 		const uploader = renderToStaticMarkup(<Uploader onFiles={vi.fn()} onProject={vi.fn()} />);
 
-		expect(imageExport).toContain("Result image");
-		expect(projectExport).toContain("Editable .cutout project");
+		expect(imageExport).toContain("Result images");
+		expect(imageExport).toContain("Editable .cutout");
+		expect(imageExport).toContain('aria-pressed="true"');
+		expect(projectExport).toContain("Editable .cutout");
 		expect(projectExport).toContain("original and transparent refined result");
 		expect(uploader).toContain("Open .cutout");
 		expect(uploader).toContain('accept=".cutout,application/vnd.cutout-studio.project+zip"');
@@ -36,14 +38,24 @@ describe("per-image result actions", () => {
 
 	it("offers AI improvement and manual editing on completed cards", () => {
 		const markup = renderToStaticMarkup(
-			<JobCard job={completedJob} backgroundCss={null} onDownload={vi.fn()} onEdit={vi.fn()} onImprove={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} />,
+			<JobCard
+				job={completedJob}
+				backgroundCss={null}
+				onDownload={vi.fn()}
+				onDownloadProject={vi.fn()}
+				onEdit={vi.fn()}
+				onImprove={vi.fn()}
+				onRemove={vi.fn()}
+				onRetry={vi.fn()}
+			/>,
 		);
 
 		expect(markup).toContain("AI improve");
 		expect(markup).toContain("AI Precision");
 		expect(markup).toContain("Hand refined");
 		expect(markup).toContain("Edit result");
-		expect(markup).toContain("Download");
+		expect(markup).toContain("Save .cutout");
+		expect(markup).toContain("Download image");
 	});
 
 	it("renders a dedicated editor page with both brush actions, zoom presets, history, precision, and save controls", () => {

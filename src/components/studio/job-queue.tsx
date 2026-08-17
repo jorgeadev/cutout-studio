@@ -1,11 +1,11 @@
-import { Download, Paintbrush, RotateCcw, X } from "lucide-react";
+import { Download, FileArchive, Paintbrush, RotateCcw, X } from "lucide-react";
 import { StatusBadge } from "@/components/studio/job-card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/image-utils";
 import type { JobQueueProps } from "@/types/job";
 
-export const JobQueue = ({ jobs, onDownload, onEdit, onRetry, onRemove }: JobQueueProps) => {
+export const JobQueue = ({ jobs, onDownload, onDownloadProject, onEdit, onRetry, onRemove }: JobQueueProps) => {
 	return (
 		<ul className="flex max-h-104 flex-col divide-y divide-border overflow-y-auto pr-1">
 			{jobs.map((job) => (
@@ -43,7 +43,10 @@ export const JobQueue = ({ jobs, onDownload, onEdit, onRetry, onRemove }: JobQue
 								<RotateCcw aria-hidden="true" />
 							</Button>
 						) : null}
-						<Button variant="ghost" size="icon-sm" aria-label={`Download ${job.name}`} disabled={job.status !== "done"} onClick={() => onDownload(job)}>
+						<Button variant="ghost" size="icon-sm" aria-label={`Save ${job.name} as .cutout project`} disabled={job.status !== "done"} onClick={() => onDownloadProject(job)}>
+							<FileArchive aria-hidden="true" />
+						</Button>
+						<Button variant="ghost" size="icon-sm" aria-label={`Download image ${job.name}`} disabled={job.status !== "done"} onClick={() => onDownload(job)}>
 							<Download aria-hidden="true" />
 						</Button>
 						<Button variant="ghost" size="icon-sm" aria-label={`Remove ${job.name}`} onClick={() => onRemove(job.id)}>

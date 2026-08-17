@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Paintbrush, RotateCcw, Sparkles, Trash2, WandSparkles } from "lucide-react";
+import { AlertTriangle, Download, FileArchive, Paintbrush, RotateCcw, Sparkles, Trash2, WandSparkles } from "lucide-react";
 import { CompareSlider } from "@/components/studio/compare-slider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { formatBytes } from "@/lib/image-utils";
 import { ALGORITHM_OPTIONS, MODEL_OPTIONS } from "@/lib/processing-options";
 import type { JobCardProps, StatusBadgeProps } from "@/types/job";
 
-export const JobCard = ({ job, backgroundCss, onDownload, onEdit, onImprove, onRetry, onRemove }: JobCardProps) => {
+export const JobCard = ({ job, backgroundCss, onDownload, onDownloadProject, onEdit, onImprove, onRetry, onRemove }: JobCardProps) => {
 	const model = MODEL_OPTIONS.find((entry) => entry.value === job.processing?.model);
 	const algorithm = ALGORITHM_OPTIONS.find((entry) => entry.value === job.processing?.algorithm);
 
@@ -106,9 +106,13 @@ export const JobCard = ({ job, backgroundCss, onDownload, onEdit, onImprove, onR
 						</Button>
 					</>
 				) : null}
+				<Button variant="outline" size="sm" disabled={job.status !== "done"} onClick={() => onDownloadProject(job)}>
+					<FileArchive data-icon="inline-start" aria-hidden="true" />
+					Save .cutout
+				</Button>
 				<Button size="sm" disabled={job.status !== "done"} onClick={() => onDownload(job)}>
 					<Download data-icon="inline-start" aria-hidden="true" />
-					Download
+					Download image
 				</Button>
 				<Button variant="ghost" size="icon-sm" aria-label={`Remove ${job.name}`} onClick={() => onRemove(job.id)}>
 					<Trash2 aria-hidden="true" />
