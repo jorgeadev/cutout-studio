@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+	activeEditorEdits,
 	applyMagicSelection,
+	appendEditorHistory,
 	brushPreviewFromClient,
 	canvasPointFromClient,
 	clampEditorZoom,
+	createEditorHistory,
 	drawEditorStroke,
 	editorZoomFromWheel,
 	encodeCanvasPng,
@@ -13,7 +16,10 @@ import {
 	MIN_EDITOR_ZOOM,
 	oppositeEditorTool,
 	panScrollFromDrag,
+	redoEditorHistory,
+	undoEditorHistory,
 } from "@/lib/mask-editor";
+import type { EditorStroke } from "@/types/editor";
 
 const imageDataFrom = (pixels: number[], width: number): ImageData =>
 	({ data: new Uint8ClampedArray(pixels), width, height: pixels.length / 4 / width, colorSpace: "srgb" }) as ImageData;
@@ -42,6 +48,45 @@ const createContext = () => {
 	};
 	return { context, pattern };
 };
+
+const historyStroke = (x: number): EditorStroke => ({ tool: "erase", size: 10, strength: 1, points: [{ x, y: 0 }] });
+const historyXs = (history: ReturnType<typeof createEditorHistory>): Array<number | undefined> =>
+	activeEditorEdits(history).map((edit) => ("kind" in edit ? edit.point.x : edit.points[0]?.x));
+
+describe("mask editor history", () => {
+	it("moves backward and forward through multiple edits", () => {
+		let history = createEditorHistory();
+		history = appendEditorHistory(history, historyStroke(1));
+		history = appendEditorHistory(history, historyStroke(2));
+		history = appendEditorHistory(history, historyStroke(3));
+
+		history = undoEditorHistory(undoEditorHistory(history));
+		expect(historyXs(history)).toEqual([1]);
+
+		history = redoEditorHistory(history);
+		expect(historyXs(history)).toEqual([1, 2]);
+	});
+
+	it("discards the forward branch when a new edit follows undo", () => {
+		let history = createEditorHistory();
+		for (const x of [1, 2, 3]) history = appendEditorHistory(history, historyStroke(x));
+		history = undoEditorHistory(history);
+		history = appendEditorHistory(history, historyStroke(4));
+
+		expect(historyXs(history)).toEqual([1, 2, 4]);
+		expect(redoEditorHistory(history)).toBe(history);
+	});
+
+	it("keeps older changes applied when the undo window reaches its limit", () => {
+		let history = createEditorHistory();
+		for (const x of [1, 2, 3]) history = appendEditorHistory(history, historyStroke(x), 2);
+
+		expect(history.base).toHaveLength(1);
+		history = undoEditorHistory(undoEditorHistory(history));
+		history = undoEditorHistory(history);
+		expect(historyXs(history)).toEqual([1]);
+	});
+});
 
 describe("mask editor coordinates", () => {
 	it("maps displayed pointer coordinates to full-resolution canvas pixels", () => {

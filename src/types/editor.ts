@@ -23,6 +23,15 @@ export interface EditorMagicSelection {
 
 export type EditorEdit = EditorStroke | EditorMagicSelection;
 
+export interface EditorHistoryState {
+	/** Older applied edits kept for correct redraws after the undo window advances. */
+	base: EditorEdit[];
+	/** The bounded undo/redo window. */
+	entries: EditorEdit[];
+	/** Number of entries currently applied; later entries are available to redo. */
+	cursor: number;
+}
+
 export interface CanvasBounds {
 	left: number;
 	top: number;

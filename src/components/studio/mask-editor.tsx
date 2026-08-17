@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowLeftRight, Eraser, Hand, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, Upload, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Eraser, Hand, LoaderCircle, Paintbrush, Redo2, RotateCcw, Save, Undo2, Upload, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ThemeToggle } from "@/components/studio/theme-toggle";
 import { Badge } from "@/components/ui/badge";
@@ -6,9 +6,12 @@ import { Button } from "@/components/ui/button";
 import { loadImage, MAX_CANVAS_SIDE } from "@/lib/image-utils";
 import {
 	applyMagicSelection,
+	activeEditorEdits,
+	appendEditorHistory,
 	brushPreviewFromClient,
 	canvasPointFromClient,
 	clampEditorZoom,
+	createEditorHistory,
 	drawEditorStroke,
 	editorZoomFromWheel,
 	encodeCanvasPng,
@@ -18,6 +21,8 @@ import {
 	MIN_EDITOR_ZOOM,
 	oppositeEditorTool,
 	panScrollFromDrag,
+	redoEditorHistory,
+	undoEditorHistory,
 } from "@/lib/mask-editor";
 import { cn } from "@/lib/utils";
 import type { EditorEdit, EditorMagicSelection, EditorStroke, MaskEditorProps, MaskEditorTool } from "@/types/editor";
@@ -48,13 +53,16 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 	const [panToolActive, setPanToolActive] = useState(false);
 	const [spacePanActive, setSpacePanActive] = useState(false);
 	const [panning, setPanning] = useState(false);
-	const [edits, setEdits] = useState<EditorEdit[]>([]);
+	const [history, setHistory] = useState(createEditorHistory);
 	const [loading, setLoading] = useState(true);
 	const [loadingEditedImage, setLoadingEditedImage] = useState(false);
 	const [loadedEditedImageName, setLoadedEditedImageName] = useState<string>();
 	const [loadEditedImageError, setLoadEditedImageError] = useState<string>();
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string>();
+	const appliedEditCount = history.base.length + history.cursor;
+	const redoCount = history.entries.length - history.cursor;
+	const hasHistory = history.base.length > 0 || history.entries.length > 0;
 
 	const redraw = useCallback((nextEdits: EditorEdit[]) => {
 		const canvas = canvasRef.current;
@@ -79,7 +87,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 		let cancelled = false;
 		setLoading(true);
 		setError(undefined);
-		setEdits([]);
+		setHistory(createEditorHistory());
 		setMagicResult(undefined);
 		setLoadedEditedImageName(undefined);
 		setLoadEditedImageError(undefined);
@@ -123,16 +131,31 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 	}, [job.cutoutUrl, job.originalUrl]);
 
 	const handleUndo = useCallback(() => {
-		setEdits((current) => {
-			const next = current.slice(0, -1);
-			redraw(next);
+		setHistory((current) => {
+			const next = undoEditorHistory(current);
+			if (next === current) return current;
+			redraw(activeEditorEdits(next));
 			setMagicResult(undefined);
 			return next;
 		});
 	}, [redraw]);
 
+	const handleRedo = useCallback(() => {
+		setHistory((current) => {
+			const next = redoEditorHistory(current);
+			if (next === current) return current;
+			redraw(activeEditorEdits(next));
+			setMagicResult(undefined);
+			return next;
+		});
+	}, [redraw]);
+
+	const commitEdit = useCallback((edit: EditorEdit) => {
+		setHistory((current) => appendEditorHistory(current, edit));
+	}, []);
+
 	const handleReset = useCallback(() => {
-		setEdits([]);
+		setHistory(createEditorHistory());
 		setMagicResult(undefined);
 		redraw([]);
 	}, [redraw]);
@@ -142,7 +165,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			const input = event.currentTarget;
 			const file = input.files?.[0];
 			if (!file) return;
-			if (edits.length && !window.confirm("Loading this image will replace your current unsaved brush and magic-selector edits. Continue?")) {
+			if (hasHistory && !window.confirm("Loading this image will replace your current unsaved brush and magic-selector history. Continue?")) {
 				input.value = "";
 				return;
 			}
@@ -172,7 +195,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 				cutoutImageRef.current = importedCanvas;
 				context.clearRect(0, 0, canvas.width, canvas.height);
 				context.drawImage(importedCanvas, 0, 0);
-				setEdits([]);
+				setHistory(createEditorHistory());
 				setMagicResult(undefined);
 				setLoadedEditedImageName(file.name);
 			} catch (reason) {
@@ -183,7 +206,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 				setLoadingEditedImage(false);
 			}
 		},
-		[edits.length],
+		[hasHistory],
 	);
 
 	useEffect(() => {
@@ -192,9 +215,15 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 		document.body.style.overflow = "hidden";
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") onClose();
-			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+			const modifier = event.ctrlKey || event.metaKey;
+			const key = event.key.toLowerCase();
+			if (modifier && key === "z") {
 				event.preventDefault();
-				handleUndo();
+				if (event.shiftKey) handleRedo();
+				else handleUndo();
+			} else if (modifier && key === "y") {
+				event.preventDefault();
+				handleRedo();
 			}
 		};
 		window.addEventListener("keydown", handleKeyDown);
@@ -203,7 +232,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			window.removeEventListener("keydown", handleKeyDown);
 			previousFocus?.focus();
 		};
-	}, [handleUndo, onClose]);
+	}, [handleRedo, handleUndo, onClose]);
 
 	const pointFromPointer = useCallback((clientX: number, clientY: number) => {
 		const canvas = canvasRef.current;
@@ -377,7 +406,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 				const selection: EditorMagicSelection = { kind: "magic", tool: editTool, point, tolerance: magicTolerance };
 				const changedPixels = applyMagicSelection(context, selection, originalPixels);
 				if (changedPixels) {
-					setEdits((current) => [...current, selection]);
+					commitEdit(selection);
 					setMagicResult(`${changedPixels.toLocaleString()} pixel${changedPixels === 1 ? "" : "s"} ${editTool === "erase" ? "made transparent" : "restored"}`);
 				} else {
 					setMagicResult(editTool === "erase" ? "No visible matching pixels found" : "No missing matching pixels found");
@@ -390,7 +419,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			activeStrokeRef.current = stroke;
 			drawEditorStroke(context, stroke, originalImage);
 		},
-		[brushSize, error, loading, loadingEditedImage, magicTolerance, panToolActive, pointFromPointer, selectionMethod, strength, tool, updateBrushPreview],
+		[brushSize, commitEdit, error, loading, loadingEditedImage, magicTolerance, panToolActive, pointFromPointer, selectionMethod, strength, tool, updateBrushPreview],
 	);
 
 	const handlePointerMove = useCallback(
@@ -432,10 +461,10 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			const activeStroke = activeStrokeRef.current;
 			if (!activeStroke) return;
 			if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-			setEdits((current) => [...current, { ...activeStroke, points: [...activeStroke.points] }]);
+			commitEdit({ ...activeStroke, points: [...activeStroke.points] });
 			activeStrokeRef.current = null;
 		},
-		[updateBrushPreview],
+		[commitEdit, updateBrushPreview],
 	);
 
 	const handleSave = useCallback(async () => {
@@ -609,12 +638,23 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 						</label>
 					)}
 
-					<div className="grid grid-cols-2 gap-2">
-						<Button type="button" variant="outline" size="sm" disabled={!edits.length || loading || loadingEditedImage} onClick={handleUndo}>
+					<div className="grid grid-cols-3 gap-2">
+						<Button type="button" variant="outline" size="sm" title="Undo (Ctrl/Cmd+Z)" disabled={history.cursor === 0 || loading || loadingEditedImage} onClick={handleUndo}>
 							<Undo2 data-icon="inline-start" aria-hidden="true" />
 							Undo
 						</Button>
-						<Button type="button" variant="outline" size="sm" disabled={!edits.length || loading || loadingEditedImage} onClick={handleReset}>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+							disabled={redoCount === 0 || loading || loadingEditedImage}
+							onClick={handleRedo}
+						>
+							<Redo2 data-icon="inline-start" aria-hidden="true" />
+							Redo
+						</Button>
+						<Button type="button" variant="outline" size="sm" disabled={appliedEditCount === 0 || loading || loadingEditedImage} onClick={handleReset}>
 							<RotateCcw data-icon="inline-start" aria-hidden="true" />
 							Reset
 						</Button>
@@ -758,7 +798,13 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 							Wheel zoom · Space + drag pan · {MIN_EDITOR_ZOOM}–{MAX_EDITOR_ZOOM}%
 						</p>
 						<p className="min-w-0 flex-1 text-right text-[11px] text-muted-foreground">
-							{edits.length ? `${edits.length} edit${edits.length === 1 ? "" : "s"}` : loadedEditedImageName ? "Loaded edit ready" : "No manual edits"}
+							{appliedEditCount
+								? `${appliedEditCount} edit${appliedEditCount === 1 ? "" : "s"}${redoCount ? ` · ${redoCount} redo` : ""}`
+								: redoCount
+									? `${redoCount} redo available`
+									: loadedEditedImageName
+										? "Loaded edit ready"
+										: "No manual edits"}
 						</p>
 					</div>
 				</div>
@@ -769,7 +815,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 				<Button type="button" variant="outline" onClick={onClose}>
 					Cancel
 				</Button>
-				<Button type="button" disabled={loading || loadingEditedImage || saving || (!edits.length && !loadedEditedImageName) || Boolean(error)} onClick={handleSave}>
+				<Button type="button" disabled={loading || loadingEditedImage || saving || (!appliedEditCount && !loadedEditedImageName) || Boolean(error)} onClick={handleSave}>
 					{saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden="true" /> : <Save data-icon="inline-start" aria-hidden="true" />}
 					{saving ? "Saving…" : "Save refinement"}
 				</Button>

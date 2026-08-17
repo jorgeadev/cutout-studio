@@ -1,4 +1,4 @@
-import type { CanvasBounds, EditorMagicSelection, EditorPoint, EditorStroke, MaskEditorTool } from "@/types/editor";
+import type { CanvasBounds, EditorEdit, EditorHistoryState, EditorMagicSelection, EditorPoint, EditorStroke, MaskEditorTool } from "@/types/editor";
 
 const clamp = (value: number, minimum: number, maximum: number): number => {
 	return Math.max(minimum, Math.min(maximum, value));
@@ -6,6 +6,28 @@ const clamp = (value: number, minimum: number, maximum: number): number => {
 
 export const MIN_EDITOR_ZOOM = 10;
 export const MAX_EDITOR_ZOOM = 3200;
+export const MAX_EDITOR_HISTORY = 100;
+
+export const createEditorHistory = (): EditorHistoryState => ({ base: [], entries: [], cursor: 0 });
+
+export const activeEditorEdits = (history: EditorHistoryState): EditorEdit[] => [...history.base, ...history.entries.slice(0, history.cursor)];
+
+export const appendEditorHistory = (history: EditorHistoryState, edit: EditorEdit, limit = MAX_EDITOR_HISTORY): EditorHistoryState => {
+	const boundedLimit = Math.max(1, Math.floor(limit));
+	let entries = [...history.entries.slice(0, history.cursor), edit];
+	let base = history.base;
+	if (entries.length > boundedLimit) {
+		const overflow = entries.length - boundedLimit;
+		base = [...base, ...entries.slice(0, overflow)];
+		entries = entries.slice(overflow);
+	}
+	return { base, entries, cursor: entries.length };
+};
+
+export const undoEditorHistory = (history: EditorHistoryState): EditorHistoryState => (history.cursor > 0 ? { ...history, cursor: history.cursor - 1 } : history);
+
+export const redoEditorHistory = (history: EditorHistoryState): EditorHistoryState =>
+	history.cursor < history.entries.length ? { ...history, cursor: history.cursor + 1 } : history;
 
 export const clampEditorZoom = (zoom: number): number => {
 	return clamp(Math.round(Number.isFinite(zoom) ? zoom : 100), MIN_EDITOR_ZOOM, MAX_EDITOR_ZOOM);

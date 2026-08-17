@@ -71,12 +71,14 @@ describe("per-image result actions", () => {
 			"Fit",
 			"100%",
 			"Undo",
+			"Redo",
 			"Reset",
 			"Run precision pass",
 			"Save refinement",
 		])
 			expect(markup).toContain(label);
 		expect(markup).toContain("Space + drag pan");
+		expect(markup).toContain("Ctrl/Cmd+Shift+Z");
 		expect(markup).toContain("10–3200%");
 		expect(markup).toContain('accept="image/png,image/webp,.png,.webp"');
 		expect(markup).toContain('data-page="mask-editor"');
