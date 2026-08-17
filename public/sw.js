@@ -1,6 +1,6 @@
 /* Minimal offline-first service worker for cutout-studio. */
-const CACHE = "cutout-studio-v3";
-const SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/app-icon-192.png"];
+const CACHE = "cutout-studio-v4";
+const SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/app-icon-192.png", "/app-icon-512.png"];
 const MODEL_ASSET_HOST = "staticimgly.com";
 
 const isTrustedModelHostname = (hostname) => hostname === MODEL_ASSET_HOST || hostname.endsWith(`.${MODEL_ASSET_HOST}`);

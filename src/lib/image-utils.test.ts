@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { backgroundToCss, extensionFor, formatBytes, isValidHex, loadImage, normalizeHex, outputFileName, readableTextColor, renderJob, triggerDownload } from "@/lib/image-utils";
+import {
+	backgroundToCss,
+	extensionFor,
+	formatBytes,
+	isValidHex,
+	loadImage,
+	normalizeHex,
+	outputFileName,
+	readableTextColor,
+	renderJob,
+	renderProjectPreview,
+	triggerDownload,
+} from "@/lib/image-utils";
 import type { BackgroundConfig } from "@/types/background";
 import type { ExportConfig } from "@/types/export";
 import type { ImageJob } from "@/types/job";
@@ -154,6 +166,20 @@ describe("image loading and rendering", () => {
 		await renderJob(createJob(), background, createExport({ format: "image/jpeg", quality: 0.72 }));
 		expect(context.fillStyle).toBe("#ffffff");
 		expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/jpeg", 0.72);
+	});
+
+	it("creates a square checkerboard preview for portable project files", async () => {
+		installImageMock(false, 120, 80);
+		const { canvas, context } = createCanvasHarness(new Blob(["preview"], { type: "image/png" }));
+
+		const preview = await renderProjectPreview("blob:cutout");
+
+		expect(preview.type).toBe("image/png");
+		expect(canvas.width).toBe(512);
+		expect(canvas.height).toBe(512);
+		expect(context.fillRect).toHaveBeenCalled();
+		expect(context.drawImage).toHaveBeenCalledWith(expect.anything(), 26, 103, 461, 307);
+		expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/png");
 	});
 
 	it("reports unavailable canvases and failed encodes", async () => {

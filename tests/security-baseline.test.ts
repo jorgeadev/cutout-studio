@@ -48,6 +48,21 @@ describe("browser security boundaries", () => {
 
 		expect(sandbox.__hostChecks).toEqual([true, true, false, false]);
 	});
+
+	it("registers installed PWAs to open .cutout projects with an OS file icon", () => {
+		const manifest = JSON.parse(readRepositoryFile("public", "manifest.webmanifest")) as {
+			file_handlers: Array<{
+				action: string;
+				accept: Record<string, string[]>;
+				icons: Array<{ src: string; sizes: string; type: string }>;
+			}>;
+		};
+		const handler = manifest.file_handlers[0];
+
+		expect(handler?.action).toContain("cutout-project");
+		expect(handler?.accept).toEqual({ "application/vnd.cutout-studio.project+zip": [".cutout"] });
+		expect(handler?.icons).toContainEqual({ src: "/app-icon-512.png", sizes: "512x512", type: "image/png" });
+	});
 });
 
 describe("repository automation security", () => {

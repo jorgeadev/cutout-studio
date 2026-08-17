@@ -17,7 +17,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Separator } from "@/components/ui/separator";
 import { createCutoutProject, cutoutProjectFileName, MAX_CUTOUT_PROJECT_BYTES, readCutoutProject } from "@/lib/cutout-project";
 import { DEFAULT_BACKGROUND, DEFAULT_EXPORT, DEFAULT_PROCESSING } from "@/lib/defaults";
-import { backgroundToCss, loadImage, outputFileName, renderJob, triggerDownload } from "@/lib/image-utils";
+import { backgroundToCss, loadImage, outputFileName, renderJob, renderProjectPreview, triggerDownload } from "@/lib/image-utils";
 import { imageMatchesCanvasAspectRatio } from "@/lib/mask-editor";
 import { precisionProcessingConfig } from "@/lib/processing-options";
 import { preloadBackgroundModel, removeImageBackground } from "@/lib/remove-background";
@@ -47,7 +47,8 @@ const createProjectForJob = async (job: ImageJob): Promise<Blob> => {
 	if (!job.cutoutUrl) throw new Error("Image has not been processed yet");
 	const response = await fetch(job.cutoutUrl);
 	if (!response.ok) throw new Error("Could not read the edited result");
-	return createCutoutProject({ original: job.file, originalName: job.name, edited: await response.blob() });
+	const [edited, preview] = await Promise.all([response.blob(), renderProjectPreview(job.cutoutUrl)]);
+	return createCutoutProject({ original: job.file, originalName: job.name, edited, preview });
 };
 
 const initialDownloads = (): Record<ModelQuality, ModelDownloadState> => {
@@ -370,6 +371,29 @@ export const Studio = () => {
 		},
 		[jobs.length, openEditor],
 	);
+
+	useEffect(() => {
+		type LaunchFileHandle = { getFile: () => Promise<File> };
+		type LaunchQueue = { setConsumer: (consumer: (params: { files?: readonly LaunchFileHandle[] }) => void) => void };
+		const launchQueue = (window as typeof window & { launchQueue?: LaunchQueue }).launchQueue;
+		if (!launchQueue) return;
+		let active = true;
+		launchQueue.setConsumer((params) => {
+			const handle = params.files?.[0];
+			if (!handle) return;
+			void handle
+				.getFile()
+				.then((file) => {
+					if (active) void handleOpenProject(file);
+				})
+				.catch(() => {
+					if (active) toast.error("Could not read the selected .cutout project");
+				});
+		});
+		return () => {
+			active = false;
+		};
+	}, [handleOpenProject]);
 
 	const handleCloseEditor = useCallback(() => {
 		const state = window.history.state && typeof window.history.state === "object" ? (window.history.state as Record<string, unknown>) : undefined;
