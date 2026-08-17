@@ -15,8 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
+import { createCutoutProject, cutoutProjectFileName, MAX_CUTOUT_PROJECT_BYTES, readCutoutProject } from "@/lib/cutout-project";
 import { DEFAULT_BACKGROUND, DEFAULT_EXPORT, DEFAULT_PROCESSING } from "@/lib/defaults";
 import { backgroundToCss, loadImage, outputFileName, renderJob, triggerDownload } from "@/lib/image-utils";
+import { imageMatchesCanvasAspectRatio } from "@/lib/mask-editor";
 import { precisionProcessingConfig } from "@/lib/processing-options";
 import { preloadBackgroundModel, removeImageBackground } from "@/lib/remove-background";
 import type { BackgroundConfig } from "@/types/background";
@@ -41,6 +43,13 @@ const safeObjectUrl = (blob: Blob): string | undefined => {
 	}
 };
 
+const createProjectForJob = async (job: ImageJob): Promise<Blob> => {
+	if (!job.cutoutUrl) throw new Error("Image has not been processed yet");
+	const response = await fetch(job.cutoutUrl);
+	if (!response.ok) throw new Error("Could not read the edited result");
+	return createCutoutProject({ original: job.file, originalName: job.name, edited: await response.blob() });
+};
+
 const initialDownloads = (): Record<ModelQuality, ModelDownloadState> => {
 	return {
 		isnet_quint8: { ...EMPTY_DOWNLOAD },
@@ -56,6 +65,7 @@ export const Studio = () => {
 	const [processing, setProcessing] = useState<ProcessingConfig>(DEFAULT_PROCESSING);
 	const [modelDownloads, setModelDownloads] = useState<Record<ModelQuality, ModelDownloadState>>(initialDownloads);
 	const [zipping, setZipping] = useState(false);
+	const [openingProject, setOpeningProject] = useState(false);
 	const [editingJobId, setEditingJobId] = useState<string>();
 	const busyRef = useRef(false);
 	const progressStampRef = useRef<{ id: string; updatedAt: number } | undefined>(undefined);
@@ -248,12 +258,21 @@ export const Studio = () => {
 	const failed = jobs.filter((job) => job.status === "error").length;
 	const activelyProcessing = jobs.some((job) => job.status === "processing");
 	const modelPreparing = Object.values(modelDownloads).some((entry) => entry.status === "downloading");
+	const openEditor = useCallback((id: string) => {
+		const currentState = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+		window.history.pushState({ ...currentState, [EDITOR_HISTORY_KEY]: id }, "");
+		setEditingJobId(id);
+	}, []);
 
 	const handleDownload = useCallback(
 		async (job: ImageJob) => {
 			try {
-				const blob = await renderJob(job, background, exportConfig);
-				triggerDownload(blob, outputFileName(job.name, exportConfig.format));
+				if (exportConfig.downloadKind === "project") {
+					triggerDownload(await createProjectForJob(job), cutoutProjectFileName(job.name));
+				} else {
+					const blob = await renderJob(job, background, exportConfig);
+					triggerDownload(blob, outputFileName(job.name, exportConfig.format));
+				}
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "Download failed");
 			}
@@ -269,15 +288,16 @@ export const Studio = () => {
 			const zip = new JSZip();
 			const used = new Set<string>();
 			for (const job of doneJobs) {
-				const blob = await renderJob(job, background, exportConfig);
-				let name = outputFileName(job.name, exportConfig.format);
+				const blob = exportConfig.downloadKind === "project" ? await createProjectForJob(job) : await renderJob(job, background, exportConfig);
+				let name = exportConfig.downloadKind === "project" ? cutoutProjectFileName(job.name) : outputFileName(job.name, exportConfig.format);
 				let counter = 2;
 				while (used.has(name)) {
-					name = outputFileName(`${job.name.replace(/\.[^./\\]+$/, "")}-${counter}`, exportConfig.format);
+					const numberedName = `${job.name.replace(/\.[^./\\]+$/, "")}-${counter}`;
+					name = exportConfig.downloadKind === "project" ? cutoutProjectFileName(numberedName) : outputFileName(numberedName, exportConfig.format);
 					counter += 1;
 				}
 				used.add(name);
-				zip.file(name, blob);
+				zip.file(name, new Uint8Array(await blob.arrayBuffer()));
 			}
 			const archive = await zip.generateAsync({ type: "blob" });
 			triggerDownload(archive, `cutout-studio-${new Date().toISOString().slice(0, 10)}.zip`);
@@ -289,11 +309,63 @@ export const Studio = () => {
 		}
 	}, [background, doneJobs, exportConfig]);
 
-	const handleEdit = useCallback((job: ImageJob) => {
-		const currentState = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
-		window.history.pushState({ ...currentState, [EDITOR_HISTORY_KEY]: job.id }, "");
-		setEditingJobId(job.id);
-	}, []);
+	const handleEdit = useCallback((job: ImageJob) => openEditor(job.id), [openEditor]);
+
+	const handleOpenProject = useCallback(
+		async (file: File) => {
+			if (jobs.length >= MAX_FILES) {
+				toast.error(`You can keep up to ${MAX_FILES} images in the workspace.`);
+				return;
+			}
+			if (file.size > MAX_CUTOUT_PROJECT_BYTES) {
+				toast.error("This .cutout project is too large to open on this device.");
+				return;
+			}
+
+			setOpeningProject(true);
+			let originalUrl: string | undefined;
+			let cutoutUrl: string | undefined;
+			try {
+				const project = await readCutoutProject(file);
+				const originalFile = new File([project.original], project.originalName, { type: project.original.type });
+				originalUrl = safeObjectUrl(originalFile);
+				cutoutUrl = safeObjectUrl(project.edited);
+				if (!originalUrl || !cutoutUrl) throw new Error("The device could not allocate the project images");
+				const [originalImage, editedImage] = await Promise.all([loadImage(originalUrl), loadImage(cutoutUrl)]);
+				if (!imageMatchesCanvasAspectRatio(editedImage.naturalWidth, editedImage.naturalHeight, originalImage.naturalWidth, originalImage.naturalHeight)) {
+					throw new Error("The original and edited images in this .cutout project do not match");
+				}
+
+				const id = `${project.originalName}-${originalFile.size}-${crypto.randomUUID()}`;
+				const restoredJob: ImageJob = {
+					id,
+					file: originalFile,
+					name: project.originalName,
+					size: originalFile.size,
+					originalUrl,
+					cutoutUrl,
+					width: originalImage.naturalWidth,
+					height: originalImage.naturalHeight,
+					status: "done",
+					progress: 1,
+					stage: "Project restored",
+					manuallyEdited: true,
+				};
+				setJobs((current) => [...current, restoredJob]);
+				openEditor(id);
+				originalUrl = undefined;
+				cutoutUrl = undefined;
+				toast.success(".cutout project opened");
+			} catch (error) {
+				toast.error(error instanceof Error ? error.message : "Could not open the .cutout project");
+			} finally {
+				if (originalUrl) URL.revokeObjectURL(originalUrl);
+				if (cutoutUrl) URL.revokeObjectURL(cutoutUrl);
+				setOpeningProject(false);
+			}
+		},
+		[jobs.length, openEditor],
+	);
 
 	const handleCloseEditor = useCallback(() => {
 		const state = window.history.state && typeof window.history.state === "object" ? (window.history.state as Record<string, unknown>) : undefined;
@@ -460,7 +532,7 @@ export const Studio = () => {
 				<main className="relative mx-auto flex w-full min-w-0 max-w-360 flex-col gap-6 px-4 pb-10 sm:px-6 lg:flex-row lg:items-start">
 					{/* Controls */}
 					<aside className="flex w-full min-w-0 flex-col gap-5 lg:sticky lg:top-20 lg:w-100 lg:shrink-0">
-						<Uploader onFiles={addFiles} disabled={modelPreparing} />
+						<Uploader onFiles={addFiles} onProject={handleOpenProject} disabled={modelPreparing || openingProject} />
 
 						<Card className="overflow-hidden border-primary/15 shadow-sm">
 							<CardHeader className="border-b border-border/60 bg-muted/20">
@@ -498,14 +570,14 @@ export const Studio = () => {
 						<Card>
 							<CardHeader>
 								<CardTitle className="text-sm">Export</CardTitle>
-								<CardDescription>Applies to single and batch downloads.</CardDescription>
+								<CardDescription>Choose a ready-to-use image or a project you can reopen later.</CardDescription>
 							</CardHeader>
 							<CardContent>
 								<ExportOptions value={exportConfig} onChange={setExportConfig} />
 							</CardContent>
 						</Card>
 
-						{background.kind === "transparent" && exportConfig.format === "image/jpeg" ? (
+						{exportConfig.downloadKind === "image" && background.kind === "transparent" && exportConfig.format === "image/jpeg" ? (
 							<Alert>
 								<AlertTitle>JPG has no transparency</AlertTitle>
 								<AlertDescription>Transparent areas will be filled with white on export.</AlertDescription>

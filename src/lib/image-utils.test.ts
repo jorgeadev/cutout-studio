@@ -1,16 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-	backgroundToCss,
-	extensionFor,
-	formatBytes,
-	isValidHex,
-	loadImage,
-	normalizeHex,
-	outputFileName,
-	readableTextColor,
-	renderJob,
-	triggerDownload,
-} from "@/lib/image-utils";
+import { backgroundToCss, extensionFor, formatBytes, isValidHex, loadImage, normalizeHex, outputFileName, readableTextColor, renderJob, triggerDownload } from "@/lib/image-utils";
 import type { BackgroundConfig } from "@/types/background";
 import type { ExportConfig } from "@/types/export";
 import type { ImageJob } from "@/types/job";
@@ -59,9 +48,10 @@ const createCanvasHarness = (encodedBlob = new Blob(["encoded"], { type: "image/
 const createJob = (): ImageJob =>
 	({
 		cutoutUrl: "blob:cutout",
-	} as ImageJob);
+	}) as ImageJob;
 
 const createExport = (overrides: Partial<ExportConfig> = {}): ExportConfig => ({
+	downloadKind: "image",
 	format: "image/png",
 	quality: 0.9,
 	scale: 1,
@@ -129,9 +119,7 @@ describe("image loading and rendering", () => {
 	});
 
 	it("rejects rendering before a cutout exists", async () => {
-		await expect(renderJob({} as ImageJob, { kind: "transparent", color: "#000", color2: "#fff", angle: 0 }, createExport())).rejects.toThrow(
-			"Image has not been processed yet",
-		);
+		await expect(renderJob({} as ImageJob, { kind: "transparent", color: "#000", color2: "#fff", angle: 0 }, createExport())).rejects.toThrow("Image has not been processed yet");
 	});
 
 	it("scales and composites a solid background", async () => {

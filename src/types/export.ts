@@ -1,6 +1,8 @@
 export type OutputFormat = "image/png" | "image/jpeg" | "image/webp";
+export type DownloadKind = "image" | "project";
 
 export interface ExportConfig {
+	downloadKind: DownloadKind;
 	format: OutputFormat;
 	/** Multiplier applied to the cutout's natural size. */
 	scale: number;

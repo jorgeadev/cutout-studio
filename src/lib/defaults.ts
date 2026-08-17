@@ -10,6 +10,7 @@ export const DEFAULT_BACKGROUND: BackgroundConfig = {
 };
 
 export const DEFAULT_EXPORT: ExportConfig = {
+	downloadKind: "image",
 	format: "image/png",
 	scale: 1,
 	quality: 0.92,

@@ -1,4 +1,4 @@
-import { Camera, ClipboardPaste, ImagePlus, Sparkles, UploadCloud } from "lucide-react";
+import { Camera, ClipboardPaste, FolderOpen, ImagePlus, Sparkles, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -6,10 +6,11 @@ import type { UploaderProps } from "@/types/uploader";
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif";
 
-export const Uploader = ({ onFiles, disabled }: UploaderProps) => {
+export const Uploader = ({ onFiles, onProject, disabled }: UploaderProps) => {
 	const [dragging, setDragging] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const cameraInputRef = useRef<HTMLInputElement>(null);
+	const projectInputRef = useRef<HTMLInputElement>(null);
 
 	// Paste images straight from the clipboard.
 	useEffect(() => {
@@ -28,7 +29,10 @@ export const Uploader = ({ onFiles, disabled }: UploaderProps) => {
 
 	const pick = (list: FileList | null) => {
 		if (!list) return;
-		const images = Array.from(list).filter((file) => file.type.startsWith("image/"));
+		const files = Array.from(list);
+		const project = files.find((file) => file.name.toLowerCase().endsWith(".cutout"));
+		if (project) onProject(project);
+		const images = files.filter((file) => file.type.startsWith("image/"));
 		if (images.length) onFiles(images);
 	};
 
@@ -57,7 +61,7 @@ export const Uploader = ({ onFiles, disabled }: UploaderProps) => {
 			</div>
 			<div className="relative flex flex-col gap-1">
 				<p className="text-sm font-semibold leading-relaxed">Drop images to start</p>
-				<p className="text-xs leading-relaxed text-muted-foreground">PNG, JPG, WebP, GIF, BMP, or AVIF. Up to 40 files per batch.</p>
+				<p className="text-xs leading-relaxed text-muted-foreground">Images for a new cutout, or a .cutout project to continue editing.</p>
 			</div>
 
 			<div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
@@ -68,6 +72,10 @@ export const Uploader = ({ onFiles, disabled }: UploaderProps) => {
 				<Button type="button" variant="outline" onClick={() => cameraInputRef.current?.click()}>
 					<Camera data-icon="inline-start" aria-hidden="true" />
 					Camera
+				</Button>
+				<Button type="button" variant="outline" onClick={() => projectInputRef.current?.click()}>
+					<FolderOpen data-icon="inline-start" aria-hidden="true" />
+					Open .cutout
 				</Button>
 			</div>
 
@@ -99,6 +107,17 @@ export const Uploader = ({ onFiles, disabled }: UploaderProps) => {
 				className="sr-only"
 				onChange={(event) => {
 					pick(event.target.files);
+					event.target.value = "";
+				}}
+			/>
+			<input
+				ref={projectInputRef}
+				type="file"
+				accept=".cutout,application/vnd.cutout-studio.project+zip"
+				className="sr-only"
+				onChange={(event) => {
+					const project = event.target.files?.[0];
+					if (project) onProject(project);
 					event.target.value = "";
 				}}
 			/>
