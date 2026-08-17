@@ -38,6 +38,7 @@ describe("per-image result actions", () => {
 		expect(markup).toContain("Space + drag pan");
 		expect(markup).toContain('data-page="mask-editor"');
 		expect(markup).toContain("Back to studio");
+		expect(markup).toContain('style="width:100%;flex-shrink:0"');
 		expect(markup).not.toContain('role="dialog"');
 		expect(markup).not.toContain('aria-modal="true"');
 	});

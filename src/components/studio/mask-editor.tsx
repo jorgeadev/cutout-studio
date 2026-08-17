@@ -483,7 +483,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 
 				<div className="order-1 flex min-h-60 min-w-0 flex-col bg-muted/30 lg:order-2 lg:min-h-0">
 					<div ref={viewportRef} className="checkerboard relative min-h-0 flex-1 overflow-auto" title="Use the mouse wheel to zoom and drag with the Pan tool">
-						<div className="flex min-h-full min-w-full p-4 sm:p-6">
+						<div className="flex min-h-full w-full min-w-0 p-4 sm:p-6">
 							<canvas
 								ref={canvasRef}
 								aria-label={`Editable background removal mask for ${job.name}`}
@@ -491,7 +491,9 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 									"m-auto h-auto max-w-none touch-none border border-border bg-transparent shadow-lg",
 									!loading && !error && (panning ? "cursor-grabbing" : panToolActive || spacePanActive ? "cursor-grab" : "cursor-none"),
 								)}
-								style={{ width: `${zoom}%` }}
+								// A canvas is a replaced flex item. Without this, flexbox
+								// shrinks high zoom levels back to its intrinsic pixel width.
+								style={{ width: `${zoom}%`, flexShrink: 0 }}
 								onPointerDown={handlePointerDown}
 								onPointerEnter={(event) => updateBrushPreview(event.clientX, event.clientY)}
 								onPointerLeave={hideBrushPreview}
