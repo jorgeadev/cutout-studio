@@ -34,9 +34,24 @@ describe("per-image result actions", () => {
 	it("renders a dedicated editor page with both brush actions, zoom presets, history, precision, and save controls", () => {
 		const markup = renderToStaticMarkup(<MaskEditor job={completedJob} onClose={vi.fn()} onImprove={vi.fn()} onSave={vi.fn()} />);
 
-		for (const label of ["Restore pixels", "Make transparent", "Brush", "Magic selector", "Pan", "Fit", "100%", "Undo", "Reset", "Run precision pass", "Save refinement"])
+		for (const label of [
+			"Restore pixels",
+			"Make transparent",
+			"Brush",
+			"Magic selector",
+			"Load edited image",
+			"Pan",
+			"Fit",
+			"100%",
+			"Undo",
+			"Reset",
+			"Run precision pass",
+			"Save refinement",
+		])
 			expect(markup).toContain(label);
 		expect(markup).toContain("Space + drag pan");
+		expect(markup).toContain("10–3200%");
+		expect(markup).toContain('accept="image/png,image/webp,.png,.webp"');
 		expect(markup).toContain('data-page="mask-editor"');
 		expect(markup).toContain("Back to studio");
 		expect(markup).toContain('style="width:100%;flex-shrink:0"');

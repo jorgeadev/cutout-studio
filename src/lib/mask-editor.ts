@@ -5,7 +5,7 @@ const clamp = (value: number, minimum: number, maximum: number): number => {
 };
 
 export const MIN_EDITOR_ZOOM = 10;
-export const MAX_EDITOR_ZOOM = 800;
+export const MAX_EDITOR_ZOOM = 3200;
 
 export const clampEditorZoom = (zoom: number): number => {
 	return clamp(Math.round(Number.isFinite(zoom) ? zoom : 100), MIN_EDITOR_ZOOM, MAX_EDITOR_ZOOM);
@@ -27,6 +27,13 @@ export const fitEditorZoom = (viewportWidth: number, viewportHeight: number, can
 };
 
 export const oppositeEditorTool = (tool: MaskEditorTool): MaskEditorTool => (tool === "restore" ? "erase" : "restore");
+
+export const imageMatchesCanvasAspectRatio = (imageWidth: number, imageHeight: number, canvasWidth: number, canvasHeight: number, tolerance = 0.01): boolean => {
+	if (imageWidth <= 0 || imageHeight <= 0 || canvasWidth <= 0 || canvasHeight <= 0) return false;
+	const imageRatio = imageWidth / imageHeight;
+	const canvasRatio = canvasWidth / canvasHeight;
+	return Math.abs(imageRatio - canvasRatio) / canvasRatio <= Math.max(0, tolerance);
+};
 
 export const panScrollFromDrag = (
 	startScrollLeft: number,

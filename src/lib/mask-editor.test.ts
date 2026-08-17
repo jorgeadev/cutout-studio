@@ -8,6 +8,7 @@ import {
 	editorZoomFromWheel,
 	encodeCanvasPng,
 	fitEditorZoom,
+	imageMatchesCanvasAspectRatio,
 	MAX_EDITOR_ZOOM,
 	MIN_EDITOR_ZOOM,
 	oppositeEditorTool,
@@ -61,6 +62,7 @@ describe("mask editor zoom", () => {
 	});
 
 	it("keeps wheel and direct zoom values within the editor limits", () => {
+		expect(MAX_EDITOR_ZOOM).toBe(3200);
 		expect(editorZoomFromWheel(MAX_EDITOR_ZOOM, -10_000)).toBe(MAX_EDITOR_ZOOM);
 		expect(editorZoomFromWheel(MIN_EDITOR_ZOOM, 10_000)).toBe(MIN_EDITOR_ZOOM);
 		expect(clampEditorZoom(Number.NaN)).toBe(100);
@@ -71,6 +73,14 @@ describe("mask editor zoom", () => {
 		expect(fitEditorZoom(1200, 800, 1600, 900)).toBe(100);
 		expect(fitEditorZoom(1200, 800, 800, 1000)).toBe(52);
 		expect(fitEditorZoom(0, 800, 800, 1000)).toBe(100);
+	});
+});
+
+describe("edited image loading", () => {
+	it("accepts proportional exports at different resolutions", () => {
+		expect(imageMatchesCanvasAspectRatio(4096, 3072, 1024, 768)).toBe(true);
+		expect(imageMatchesCanvasAspectRatio(1000, 1000, 1024, 768)).toBe(false);
+		expect(imageMatchesCanvasAspectRatio(0, 1000, 1024, 768)).toBe(false);
 	});
 });
 

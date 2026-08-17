@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowLeftRight, Eraser, Hand, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Eraser, Hand, LoaderCircle, Paintbrush, RotateCcw, Save, Undo2, Upload, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ThemeToggle } from "@/components/studio/theme-toggle";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import {
 	editorZoomFromWheel,
 	encodeCanvasPng,
 	fitEditorZoom,
+	imageMatchesCanvasAspectRatio,
 	MAX_EDITOR_ZOOM,
 	MIN_EDITOR_ZOOM,
 	oppositeEditorTool,
@@ -25,11 +26,12 @@ type EditorSelectionMethod = "brush" | "magic";
 
 export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps) => {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const editedImageInputRef = useRef<HTMLInputElement>(null);
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const brushCursorRef = useRef<HTMLDivElement>(null);
 	const originalImageRef = useRef<HTMLImageElement>(null);
 	const originalPixelsRef = useRef<ImageData>(null);
-	const cutoutImageRef = useRef<HTMLImageElement>(null);
+	const cutoutImageRef = useRef<CanvasImageSource>(null);
 	const activeStrokeRef = useRef<EditorStroke>(null);
 	const panGestureRef = useRef<{ pointerId: number; clientX: number; clientY: number; scrollLeft: number; scrollTop: number }>(null);
 	const lastPointerRef = useRef<{ clientX: number; clientY: number }>(null);
@@ -48,6 +50,9 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 	const [panning, setPanning] = useState(false);
 	const [edits, setEdits] = useState<EditorEdit[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [loadingEditedImage, setLoadingEditedImage] = useState(false);
+	const [loadedEditedImageName, setLoadedEditedImageName] = useState<string>();
+	const [loadEditedImageError, setLoadEditedImageError] = useState<string>();
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string>();
 
@@ -76,6 +81,8 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 		setError(undefined);
 		setEdits([]);
 		setMagicResult(undefined);
+		setLoadedEditedImageName(undefined);
+		setLoadEditedImageError(undefined);
 		originalPixelsRef.current = null;
 
 		const initialize = async () => {
@@ -129,6 +136,55 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 		setMagicResult(undefined);
 		redraw([]);
 	}, [redraw]);
+
+	const handleLoadEditedImage = useCallback(
+		async (event: React.ChangeEvent<HTMLInputElement>) => {
+			const input = event.currentTarget;
+			const file = input.files?.[0];
+			if (!file) return;
+			if (edits.length && !window.confirm("Loading this image will replace your current unsaved brush and magic-selector edits. Continue?")) {
+				input.value = "";
+				return;
+			}
+
+			setLoadingEditedImage(true);
+			setLoadEditedImageError(undefined);
+			let imageUrl: string | undefined;
+			try {
+				imageUrl = URL.createObjectURL(file);
+				const editedImage = await loadImage(imageUrl);
+				const canvas = canvasRef.current;
+				const context = canvas?.getContext("2d");
+				if (!canvas || !context) throw new Error("Canvas editing is not available in this browser");
+				if (!imageMatchesCanvasAspectRatio(editedImage.naturalWidth, editedImage.naturalHeight, canvas.width, canvas.height)) {
+					throw new Error("Choose an edited version of this image with the same aspect ratio");
+				}
+
+				const importedCanvas = document.createElement("canvas");
+				importedCanvas.width = canvas.width;
+				importedCanvas.height = canvas.height;
+				const importedContext = importedCanvas.getContext("2d");
+				if (!importedContext) throw new Error("Could not prepare the edited image");
+				importedContext.imageSmoothingEnabled = true;
+				importedContext.imageSmoothingQuality = "high";
+				importedContext.drawImage(editedImage, 0, 0, canvas.width, canvas.height);
+
+				cutoutImageRef.current = importedCanvas;
+				context.clearRect(0, 0, canvas.width, canvas.height);
+				context.drawImage(importedCanvas, 0, 0);
+				setEdits([]);
+				setMagicResult(undefined);
+				setLoadedEditedImageName(file.name);
+			} catch (reason) {
+				setLoadEditedImageError(reason instanceof Error ? reason.message : "Could not load the edited image");
+			} finally {
+				if (imageUrl) URL.revokeObjectURL(imageUrl);
+				input.value = "";
+				setLoadingEditedImage(false);
+			}
+		},
+		[edits.length],
+	);
 
 	useEffect(() => {
 		const previousOverflow = document.body.style.overflow;
@@ -296,7 +352,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			const originalImage = originalImageRef.current;
 			const originalPixels = originalPixelsRef.current;
 			const point = pointFromPointer(event.clientX, event.clientY);
-			if (!canvas || !viewport || !context || !originalImage || !originalPixels || !point || loading || error) return;
+			if (!canvas || !viewport || !context || !originalImage || !originalPixels || !point || loading || loadingEditedImage || error) return;
 
 			const shouldPan = (event.button === 0 && (panToolActive || spacePanRef.current)) || event.button === 1;
 			if (shouldPan) {
@@ -334,7 +390,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 			activeStrokeRef.current = stroke;
 			drawEditorStroke(context, stroke, originalImage);
 		},
-		[brushSize, error, loading, magicTolerance, panToolActive, pointFromPointer, selectionMethod, strength, tool, updateBrushPreview],
+		[brushSize, error, loading, loadingEditedImage, magicTolerance, panToolActive, pointFromPointer, selectionMethod, strength, tool, updateBrushPreview],
 	);
 
 	const handlePointerMove = useCallback(
@@ -554,14 +610,40 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 					)}
 
 					<div className="grid grid-cols-2 gap-2">
-						<Button type="button" variant="outline" size="sm" disabled={!edits.length || loading} onClick={handleUndo}>
+						<Button type="button" variant="outline" size="sm" disabled={!edits.length || loading || loadingEditedImage} onClick={handleUndo}>
 							<Undo2 data-icon="inline-start" aria-hidden="true" />
 							Undo
 						</Button>
-						<Button type="button" variant="outline" size="sm" disabled={!edits.length || loading} onClick={handleReset}>
+						<Button type="button" variant="outline" size="sm" disabled={!edits.length || loading || loadingEditedImage} onClick={handleReset}>
 							<RotateCcw data-icon="inline-start" aria-hidden="true" />
 							Reset
 						</Button>
+					</div>
+
+					<div className="rounded-lg border border-border bg-background p-3">
+						<p className="text-xs font-semibold">Reuse a previous edit</p>
+						<p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Load a transparent PNG or WebP downloaded earlier instead of repeating the same edits.</p>
+						<input
+							ref={editedImageInputRef}
+							type="file"
+							accept="image/png,image/webp,.png,.webp"
+							aria-label="Choose a previously edited image"
+							className="sr-only"
+							onChange={handleLoadEditedImage}
+						/>
+						<Button type="button" variant="outline" size="sm" className="mt-3 w-full" disabled={loading || loadingEditedImage} onClick={() => editedImageInputRef.current?.click()}>
+							{loadingEditedImage ? <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden="true" /> : <Upload data-icon="inline-start" aria-hidden="true" />}
+							{loadingEditedImage ? "Loading edit…" : "Load edited image"}
+						</Button>
+						{loadEditedImageError ? (
+							<p role="alert" className="mt-2 text-[10px] leading-relaxed text-destructive">
+								{loadEditedImageError}
+							</p>
+						) : loadedEditedImageName ? (
+							<p className="mt-2 truncate text-[10px] text-primary" title={loadedEditedImageName}>
+								Loaded: {loadedEditedImageName}
+							</p>
+						) : null}
 					</div>
 
 					<div className="mt-auto rounded-lg border border-primary/20 bg-primary/5 p-3">
@@ -676,7 +758,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 							Wheel zoom · Space + drag pan · {MIN_EDITOR_ZOOM}–{MAX_EDITOR_ZOOM}%
 						</p>
 						<p className="min-w-0 flex-1 text-right text-[11px] text-muted-foreground">
-							{edits.length ? `${edits.length} edit${edits.length === 1 ? "" : "s"}` : "No manual edits"}
+							{edits.length ? `${edits.length} edit${edits.length === 1 ? "" : "s"}` : loadedEditedImageName ? "Loaded edit ready" : "No manual edits"}
 						</p>
 					</div>
 				</div>
@@ -687,7 +769,7 @@ export const MaskEditor = ({ job, onClose, onImprove, onSave }: MaskEditorProps)
 				<Button type="button" variant="outline" onClick={onClose}>
 					Cancel
 				</Button>
-				<Button type="button" disabled={loading || saving || !edits.length || Boolean(error)} onClick={handleSave}>
+				<Button type="button" disabled={loading || loadingEditedImage || saving || (!edits.length && !loadedEditedImageName) || Boolean(error)} onClick={handleSave}>
 					{saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden="true" /> : <Save data-icon="inline-start" aria-hidden="true" />}
 					{saving ? "Saving…" : "Save refinement"}
 				</Button>
