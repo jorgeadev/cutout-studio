@@ -4,6 +4,12 @@ settings:
   autoInstallPeers: false
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    onnxruntime-web:
+      specifier: 1.27.0
+      version: 1.27.0
+
 overrides:
   '@imgly/background-removal@1.7.0>onnxruntime-web': 1.27.0
   nanoid: 3.3.18
@@ -40,7 +46,7 @@ importers:
         specifier: 0.4.6
         version: 0.4.6(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       onnxruntime-web:
-        specifier: 1.27.0
+        specifier: 'catalog:'
         version: 1.27.0
       react:
         specifier: 19.2.8
