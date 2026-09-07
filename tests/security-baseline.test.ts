@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
@@ -129,8 +130,15 @@ describe("repository automation security", () => {
 		const backgroundRemovalPeerOverride = pnpmPolicy.match(/^\s{2}'@imgly\/background-removal@1\.7\.0>onnxruntime-web':\s*(\S+)$/m)?.[1];
 		const backgroundRemovalBundle = readRepositoryFile("node_modules", "@imgly", "background-removal", "dist", "index.mjs");
 
-		expect(backgroundRemovalPeerOverride).toBeDefined();
-		expect(applicationPackage.dependencies["onnxruntime-web"]).toBe(backgroundRemovalPeerOverride);
+		expect(backgroundRemovalPeerOverride).toBe("'catalog:'");
+		expect(applicationPackage.dependencies["onnxruntime-web"]).toBe("catalog:");
+		const runtimeVersion = pnpmPolicy.match(/^catalog:\s*\r?\n(?:\s{2}#[^\r\n]*\r?\n)*\s{2}onnxruntime-web:\s*(\S+)$/m)?.[1];
+		expect(runtimeVersion).toMatch(/^\d+\.\d+\.\d+$/);
+		const applicationRequire = createRequire(import.meta.url);
+		const backgroundRemovalRequire = createRequire(realpathSync(join(repositoryRoot, "node_modules", "@imgly", "background-removal", "dist", "index.mjs")));
+		expect(backgroundRemovalRequire.resolve("onnxruntime-web")).toBe(applicationRequire.resolve("onnxruntime-web"));
+		const installedRuntime = JSON.parse(readRepositoryFile("node_modules", "onnxruntime-web", "package.json")) as { version: string };
+		expect(installedRuntime.version).toBe(runtimeVersion);
 		expect(pnpmPolicy).toMatch(/^\s{2}'@imgly\/background-removal@1\.7\.0': patches\/@imgly__background-removal@1\.7\.0\.patch$/m);
 		for (const asset of [
 			"ort-wasm-simd-threaded.mjs",
