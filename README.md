@@ -71,16 +71,16 @@ Choose **Edit result** on any completed image to open the alpha-mask editor. Use
 ### Requirements
 
 - Node.js `>=24.0.0` for local development
-- pnpm `11.21.0` (the version declared by the project)
+- pnpm `12.4.2` (the version declared by the project)
 - A modern browser with WebAssembly support; a WebGPU-capable browser is recommended for GPU acceleration
 
-The CI matrix verifies the project on Node.js 24 to 26 by using pnpm's standalone executable.
+The CI matrix verifies the project on Node.js 24, 25, and 26 by using pnpm's standalone executable.
 
 Clone the repository, then run:
 
 ```bash
 cd cutout-studio
-npm install --global pnpm@11.21.0
+npm install --global pnpm@12.4.2
 pnpm install --frozen-lockfile
 pnpm dev
 ```
