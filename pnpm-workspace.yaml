@@ -4,17 +4,21 @@ strictPeerDependencies: true
 minimumReleaseAge: 1440
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
+# Exact versions shipped with 0.2.0 that were published inside the 24h window.
+# They are pinned here only until they age past the policy; newer releases are
+# not exempt.
+minimumReleaseAgeExclude:
+  - '@vitejs/plugin-react@6.1.2'
+  - postcss@8.5.29
+  - nanoid@3.3.20
 trustPolicy: no-downgrade
 trustLockfile: false
 blockExoticSubdeps: true
 catalog:
-  # Keep the application and IMG.LY's patched runtime assets on one exact version.
-  onnxruntime-web: 1.27.0
+  # ONNX Runtime Web runs the pinned IS-Net model directly in the browser.
+  onnxruntime-web: 1.30.0
+# GHSA-68fv-2mgg-jv7q: event-loop DoS via indexed source-map section offsets.
 overrides:
-  # IMG.LY 1.7.0 pins 1.21.0, but the local patch loads version-matched runtime assets.
-  '@imgly/background-removal@1.7.0>onnxruntime-web': 'catalog:'
-  nanoid: 3.3.18
+  source-map-js: 1.2.2
 allowBuilds:
   protobufjs: false
-patchedDependencies:
-  '@imgly/background-removal@1.7.0': patches/@imgly__background-removal@1.7.0.patch

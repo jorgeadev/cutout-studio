@@ -1,11 +1,10 @@
 import { CloudOff, CodeXml, FileArchive, HardDrive, Images, Layers, ShieldCheck, Sparkles, Trash2, WandSparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BackgroundPicker } from "@/components/studio/background-picker";
 import { ExportOptions } from "@/components/studio/export-options";
 import { JobCard } from "@/components/studio/job-card";
 import { JobQueue } from "@/components/studio/job-queue";
-import { MaskEditor } from "@/components/studio/mask-editor";
 import { ProcessingOptions } from "@/components/studio/processing-options";
 import { ThemeToggle } from "@/components/studio/theme-toggle";
 import { Uploader } from "@/components/studio/uploader";
@@ -34,6 +33,7 @@ const SETTINGS_KEY = "cutout-studio-settings";
 const LEGACY_SETTINGS_KEY = "cutout-settings";
 const EDITOR_HISTORY_KEY = "cutoutStudioEditor";
 const EMPTY_DOWNLOAD: ModelDownloadState = { status: "idle", progress: 0 };
+const MaskEditor = lazy(() => import("@/components/studio/mask-editor").then((module) => ({ default: module.MaskEditor })));
 
 const safeObjectUrl = (blob: Blob): string | undefined => {
 	try {
@@ -498,7 +498,11 @@ export const Studio = () => {
 	}, []);
 
 	if (editingJob) {
-		return <MaskEditor job={editingJob} onClose={handleCloseEditor} onImprove={handleImprove} onSave={handleSaveRefinement} />;
+		return (
+			<Suspense fallback={<div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">Loading editor…</div>}>
+				<MaskEditor job={editingJob} onClose={handleCloseEditor} onImprove={handleImprove} onSave={handleSaveRefinement} />
+			</Suspense>
+		);
 	}
 
 	return (

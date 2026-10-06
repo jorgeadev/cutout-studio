@@ -1,10 +1,9 @@
-import { readdirSync, readFileSync, realpathSync } from "node:fs";
-import { createRequire } from "node:module";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runInNewContext } from "node:vm";
 import type { UserConfig } from "vite";
 import { describe, expect, it } from "vitest";
+import { ISNET_MODEL_HOST, ISNET_MODEL_REVISION, MODEL_DESCRIPTORS, modelSourceUrl } from "../src/lib/model-registry";
 import viteConfig from "../vite.config";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -21,7 +20,7 @@ describe("browser security boundaries", () => {
 			"Cross-Origin-Embedder-Policy": "require-corp",
 			"Cross-Origin-Opener-Policy": "same-origin",
 		});
-		expect(localConfig.optimizeDeps?.exclude).toContain("@imgly/background-removal");
+		expect(localConfig.optimizeDeps?.exclude ?? []).not.toContain("@imgly/background-removal");
 
 		const productionConfig = JSON.parse(readRepositoryFile("vercel.json")) as {
 			headers: Array<{ headers: Array<{ key: string; value: string }> }>;
@@ -33,21 +32,23 @@ describe("browser security boundaries", () => {
 		});
 	});
 
-	it("only trusts the exact model host and its real subdomains", () => {
-		const serviceWorkerSource = readRepositoryFile("public", "sw.js");
-		const sandbox: Record<string, unknown> = {
-			URL,
-			self: {
-				addEventListener: () => undefined,
-				location: { origin: "https://cutout-studio.example" },
-			},
-		};
-		runInNewContext(
-			`${serviceWorkerSource}\nglobalThis.__hostChecks = [isTrustedModelHostname("staticimgly.com"), isTrustedModelHostname("cdn.staticimgly.com"), isTrustedModelHostname("evilstaticimgly.com"), isTrustedModelHostname("staticimgly.com.attacker.example")];`,
-			sandbox,
-		);
+	it("only downloads models from the pinned Hugging Face revision with verified digests", () => {
+		expect(ISNET_MODEL_REVISION).toMatch(/^[0-9a-f]{40}$/);
+		for (const model of ["isnet_quint8", "isnet_fp16", "isnet"] as const) {
+			const url = new URL(modelSourceUrl(model));
+			expect(url.protocol).toBe("https:");
+			expect(url.hostname).toBe(ISNET_MODEL_HOST);
+			expect(url.pathname).toContain(ISNET_MODEL_REVISION);
+			expect(MODEL_DESCRIPTORS[model].sha256).toMatch(/^[0-9a-f]{64}$/);
+		}
 
-		expect(sandbox.__hostChecks).toEqual([true, true, false, false]);
+		const registry = readRepositoryFile("src", "lib", "model-registry.ts");
+		expect(registry).not.toContain("staticimgly");
+
+		const serviceWorkerSource = readRepositoryFile("public", "sw.js");
+		expect(serviceWorkerSource).not.toContain("MODEL_ASSET_HOST");
+		expect(serviceWorkerSource).not.toContain("staticimgly");
+		expect(serviceWorkerSource).toContain("url.origin !== self.location.origin");
 	});
 
 	it("registers installed PWAs to open .cutout projects with an OS file icon", () => {
@@ -122,31 +123,27 @@ describe("repository automation security", () => {
 		expect(pnpmPolicy).toMatch(/^blockExoticSubdeps:\s*true$/m);
 	});
 
-	it("keeps ONNX Runtime aligned with the background-removal compatibility policy", () => {
+	it("pins ONNX Runtime and no longer bundles the IMG.LY runtime", () => {
 		const applicationPackage = JSON.parse(readRepositoryFile("package.json")) as {
 			dependencies: Record<string, string>;
 		};
 		const pnpmPolicy = readRepositoryFile("pnpm-workspace.yaml");
-		const backgroundRemovalPeerOverride = pnpmPolicy.match(/^\s{2}'@imgly\/background-removal@1\.7\.0>onnxruntime-web':\s*(\S+)$/m)?.[1];
-		const backgroundRemovalBundle = readRepositoryFile("node_modules", "@imgly", "background-removal", "dist", "index.mjs");
 
-		expect(backgroundRemovalPeerOverride).toBe("'catalog:'");
 		expect(applicationPackage.dependencies["onnxruntime-web"]).toBe("catalog:");
+		expect(applicationPackage.dependencies["@imgly/background-removal"]).toBeUndefined();
+		expect(pnpmPolicy).not.toMatch(/imgly/i);
 		const runtimeVersion = pnpmPolicy.match(/^catalog:\s*\r?\n(?:\s{2}#[^\r\n]*\r?\n)*\s{2}onnxruntime-web:\s*(\S+)$/m)?.[1];
 		expect(runtimeVersion).toMatch(/^\d+\.\d+\.\d+$/);
-		const applicationRequire = createRequire(import.meta.url);
-		const backgroundRemovalRequire = createRequire(realpathSync(join(repositoryRoot, "node_modules", "@imgly", "background-removal", "dist", "index.mjs")));
-		expect(backgroundRemovalRequire.resolve("onnxruntime-web")).toBe(applicationRequire.resolve("onnxruntime-web"));
 		const installedRuntime = JSON.parse(readRepositoryFile("node_modules", "onnxruntime-web", "package.json")) as { version: string };
 		expect(installedRuntime.version).toBe(runtimeVersion);
-		expect(pnpmPolicy).toMatch(/^\s{2}'@imgly\/background-removal@1\.7\.0': patches\/@imgly__background-removal@1\.7\.0\.patch$/m);
+		const runtimeSource = readRepositoryFile("src", "lib", "onnx-runtime.ts");
 		for (const asset of [
 			"ort-wasm-simd-threaded.mjs",
 			"ort-wasm-simd-threaded.wasm",
 			"ort-wasm-simd-threaded.jsep.mjs",
 			"ort-wasm-simd-threaded.jsep.wasm",
 		]) {
-			expect(backgroundRemovalBundle).toContain(`onnxruntime-web/${asset}?url`);
+			expect(runtimeSource).toContain(`onnxruntime-web/${asset}?url`);
 		}
 	});
 

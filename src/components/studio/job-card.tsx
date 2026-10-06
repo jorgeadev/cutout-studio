@@ -1,4 +1,5 @@
 import { AlertTriangle, Download, FileArchive, Paintbrush, RotateCcw, Sparkles, Trash2, WandSparkles } from "lucide-react";
+import { memo } from "react";
 import { CompareSlider } from "@/components/studio/compare-slider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { formatBytes } from "@/lib/image-utils";
 import { ALGORITHM_OPTIONS, MODEL_OPTIONS } from "@/lib/processing-options";
 import type { JobCardProps, StatusBadgeProps } from "@/types/job";
 
-export const JobCard = ({ job, backgroundCss, onDownload, onDownloadProject, onEdit, onImprove, onRetry, onRemove }: JobCardProps) => {
+export const JobCard = memo(({ job, backgroundCss, onDownload, onDownloadProject, onEdit, onImprove, onRetry, onRemove }: JobCardProps) => {
 	const model = MODEL_OPTIONS.find((entry) => entry.value === job.processing?.model);
 	const algorithm = ALGORITHM_OPTIONS.find((entry) => entry.value === job.processing?.algorithm);
 
@@ -71,7 +72,7 @@ export const JobCard = ({ job, backgroundCss, onDownload, onDownloadProject, onE
 					</div>
 				) : (
 					<div className="relative aspect-4/3 w-full overflow-hidden rounded-xl border border-border bg-muted">
-						<img src={job.originalUrl || "/placeholder.svg"} alt={job.name} className="h-full w-full object-contain opacity-35 blur-[1px]" />
+						<img src={job.originalUrl || "/placeholder.svg"} alt={job.name} loading="lazy" decoding="async" className="h-full w-full object-contain opacity-35 blur-[1px]" />
 						<div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/20 p-4 backdrop-blur-[2px]">
 							<span className="flex size-10 items-center justify-center rounded-full bg-background shadow-sm">
 								<Spinner />
@@ -120,7 +121,8 @@ export const JobCard = ({ job, backgroundCss, onDownload, onDownloadProject, onE
 			</CardFooter>
 		</Card>
 	);
-};
+});
+JobCard.displayName = "JobCard";
 
 export const StatusBadge = ({ job }: StatusBadgeProps) => {
 	if (job.status === "done") return <Badge className="bg-emerald-600 text-white dark:bg-emerald-500">Ready</Badge>;

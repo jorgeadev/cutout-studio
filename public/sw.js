@@ -1,9 +1,6 @@
 /* Minimal offline-first service worker for cutout-studio. */
-const CACHE = "cutout-studio-v4";
+const CACHE = "cutout-studio-v5";
 const SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/app-icon-192.png", "/app-icon-512.png"];
-const MODEL_ASSET_HOST = "staticimgly.com";
-
-const isTrustedModelHostname = (hostname) => hostname === MODEL_ASSET_HOST || hostname.endsWith(`.${MODEL_ASSET_HOST}`);
 
 self.addEventListener("install", (event) => {
 	event.waitUntil(
@@ -28,26 +25,10 @@ self.addEventListener("fetch", (event) => {
 	if (request.method !== "GET") return;
 
 	const url = new URL(request.url);
-	const isModelAsset = isTrustedModelHostname(url.hostname);
-	const isSameOrigin = url.origin === self.location.origin;
 
-	if (!isSameOrigin && !isModelAsset) return;
-
-	// Model weights never change for a given version: cache first.
-	if (isModelAsset) {
-		event.respondWith(
-			caches.match(request).then(
-				(hit) =>
-					hit ||
-					fetch(request).then((response) => {
-						const copy = response.clone();
-						caches.open(CACHE).then((cache) => cache.put(request, copy));
-						return response;
-					}),
-			),
-		);
-		return;
-	}
+	// Model weights are fetched and cached by the page itself so their pinned
+	// URLs and SHA-256 digests stay under application control.
+	if (url.origin !== self.location.origin) return;
 
 	// App shell and assets: network first, fall back to cache when offline.
 	event.respondWith(

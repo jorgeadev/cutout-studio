@@ -4,6 +4,7 @@ import { ExportOptions } from "@/components/studio/export-options";
 import { JobCard } from "@/components/studio/job-card";
 import { MaskEditor } from "@/components/studio/mask-editor";
 import { Uploader } from "@/components/studio/uploader";
+import { ThemeProvider } from "@/components/theme-provider";
 import { DEFAULT_EXPORT } from "@/lib/defaults";
 import type { ImageJob } from "@/types/job";
 
@@ -59,7 +60,11 @@ describe("per-image result actions", () => {
 	});
 
 	it("renders a dedicated editor page with both brush actions, zoom presets, history, precision, and save controls", () => {
-		const markup = renderToStaticMarkup(<MaskEditor job={completedJob} onClose={vi.fn()} onImprove={vi.fn()} onSave={vi.fn()} />);
+		const markup = renderToStaticMarkup(
+			<ThemeProvider>
+				<MaskEditor job={completedJob} onClose={vi.fn()} onImprove={vi.fn()} onSave={vi.fn()} />
+			</ThemeProvider>,
+		);
 
 		for (const label of [
 			"Restore pixels",
