@@ -44,11 +44,13 @@ Most background-removal tools send images to a remote server. cutout-studio down
 
 | Model | Precision | Approximate download | Best for |
 | --- | ---: | ---: | --- |
-| Swift | 8-bit | 42 MB | Drafts, mobile devices, and large batches |
-| Studio | 16-bit | 84 MB | The recommended balance of detail and size |
-| Max | 32-bit | 168 MB | Difficult edges where maximum precision matters |
+| Swift | 8-bit | 44 MB | Drafts, mobile devices, and large batches |
+| Studio | 16-bit | 88 MB | The recommended balance of detail and size |
+| Max | 32-bit | 176 MB | Difficult edges where maximum precision matters |
 
 The first run for a model takes longer because its assets must be downloaded. Prepared models are cached for later sessions.
+
+The app downloads these weights directly from a pinned [Hugging Face revision](https://huggingface.co/onnx-community/ISNet-ONNX/tree/3fe6e3db3e32c69aadde61fe388ddb1a0574440c) and verifies each file against a SHA-256 digest before loading it. A changed, truncated, or corrupted download is discarded instead of being executed.
 
 For an individual result that needs more detail, choose **AI improve** on its image card. This queues only that image with Max model precision and the Hair Detail algorithm. The image still runs entirely in the browser.
 
@@ -71,7 +73,7 @@ Choose **Edit result** on any completed image to open the alpha-mask editor. Use
 ### Requirements
 
 - Node.js `>=24.0.0` for local development
-- pnpm `12.4.2` (the version declared by the project)
+- pnpm `12.9.1` (the version declared by the project)
 - A modern browser with WebAssembly support; a WebGPU-capable browser is recommended for GPU acceleration
 
 The CI matrix verifies the project on Node.js 24, 25, and 26 by using pnpm's standalone executable.
@@ -80,12 +82,14 @@ Clone the repository, then run:
 
 ```bash
 cd cutout-studio
-npm install --global pnpm@12.4.2
+npm install --global pnpm@12.9.1
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
 Open the local URL printed by Vite. Use the development server instead of opening `index.html` directly because the app requires cross-origin isolation headers for multithreaded WebAssembly.
+
+The app runs the IS-Net model directly through its own ONNX Runtime Web pipeline. Model URLs, sizes, and SHA-256 digests live in `src/lib/model-registry.ts`; downloads are streamed with progress, verified, and stored in Cache Storage by `src/lib/model-cache.ts`.
 
 ## Available scripts
 
@@ -104,8 +108,8 @@ Open the local URL printed by Vite. Use the development server instead of openin
 ## How it works
 
 1. The browser decodes each selected image and queues it for sequential processing to keep lower-powered devices responsive.
-2. `@imgly/background-removal` loads the selected IS-Net model and runs it through ONNX Runtime Web.
-3. The selected matte algorithm adjusts the resulting alpha channel with Canvas APIs.
+2. The app downloads the pinned IS-Net ONNX weights, verifies their SHA-256 digests, and runs them with ONNX Runtime Web on WebGPU or multithreaded WASM.
+3. The resulting 1024×1024 alpha mask is composited onto the full-resolution source, then the selected matte algorithm adjusts its alpha channel with Canvas APIs.
 4. AI Precision can rerun one difficult result with full model precision, while the mask editor can restore or erase local alpha regions by hand.
 5. The cutout is composited onto transparency, a solid color, or a gradient.
 6. Canvas encodes the configured output, and JSZip creates batch archives when requested.
@@ -115,7 +119,7 @@ No backend or API key is required.
 ## Privacy
 
 - Selected images are represented by local object URLs and are not sent to an image-processing server.
-- Model weights are downloaded from IMG.LY's static asset host and cached by the browser.
+- Model weights are downloaded from a pinned Hugging Face revision and cached by the browser.
 - Only processing and export preferences are stored in `localStorage`.
 - Production builds include Vercel Analytics for aggregate usage telemetry; image contents are not passed to it by the application.
 
@@ -143,6 +147,7 @@ The production service worker provides offline app-shell support and caches mode
 ```text
 cutout-studio/
 ├── public/                  # PWA manifest, service worker, sample, and app icons
+├── tests/                   # Vitest suites mirroring src/ plus security baselines
 ├── src/
 │   ├── components/
 │   │   ├── studio/         # Upload, processing, preview, and export features
@@ -162,9 +167,9 @@ cutout-studio/
 | --- | --- |
 | UI | React 19, TypeScript, Tailwind CSS 4, local shadcn-style primitives, Base UI |
 | Build tooling | Vite 8, pnpm, Biome |
-| Background removal | IMG.LY Background Removal, IS-Net, ONNX Runtime Web |
+| Background removal | IS-Net (`onnx-community/ISNet-ONNX`), ONNX Runtime Web |
 | Export | Canvas API, JSZip |
-| App experience | Service Worker, Web App Manifest, next-themes, Sonner |
+| App experience | Service Worker, Web App Manifest, Sonner |
 
 ## Troubleshooting
 
@@ -174,6 +179,7 @@ cutout-studio/
 | WebGPU is unavailable | Select Auto or CPU processing, or use a browser/device with WebGPU support. |
 | First cutout takes a while | The selected model may still be downloading. Swift has the smallest initial download. |
 | ONNX runtime or metadata mismatch after an update | Unregister the service worker, clear the site's cached data, and reload so runtime and WASM files come from the same build. |
+| A model fails its integrity check | Clear the site's cached storage and reload so the pinned model downloads again from the exact revision. |
 | Large images exhaust browser memory | Use Swift, process a smaller batch, or resize the source images before importing them. |
 
 ## Contributing
@@ -200,12 +206,13 @@ Keep image processing client-side, preserve keyboard and screen-reader behavior,
 
 ## License
 
-cutout-studio is open source under the [GNU Affero General Public License v3.0 only](LICENSE.md). This matches the copyleft license used by the bundled `@imgly/background-removal` dependency. Third-party packages remain subject to their respective licenses.
+cutout-studio is open source under the [GNU Affero General Public License v3.0 only](LICENSE.md). The IS-Net ONNX weights are downloaded at runtime from the `onnx-community/ISNet-ONNX` repository and are distributed there under the AGPL-3.0 license. Third-party packages remain subject to their respective licenses.
 
 If you operate a modified version over a network, review the AGPL requirements for offering the corresponding source code to its users.
 
 ## Acknowledgements
 
-- [IMG.LY Background Removal](https://github.com/imgly/background-removal-js) provides the browser inference pipeline.
+- [IS-Net](https://github.com/xuebinqin/DIS) provides the dichotomous image segmentation model.
+- [onnx-community/ISNet-ONNX](https://huggingface.co/onnx-community/ISNet-ONNX) provides the pinned browser-ready ONNX weights.
 - [ONNX Runtime Web](https://onnxruntime.ai/docs/get-started/with-javascript/web.html) runs the models in the browser.
 - [shadcn](https://ui.shadcn.com/) and [Base UI](https://base-ui.com/) provide the UI primitives.
