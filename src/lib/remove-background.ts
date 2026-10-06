@@ -1,20 +1,11 @@
 import { loadImage, MAX_CANVAS_SIDE } from "@/lib/image-utils";
+import { MODEL_INPUT_MEAN, MODEL_INPUT_STD } from "@/lib/model-registry";
+import { getSegmentationSession, type SegmentationSession } from "@/lib/onnx-runtime";
 import { resolveProcessingDevice } from "@/lib/runtime-capabilities";
 import type { MatteAlgorithm, PreloadOptions, ProcessingDevice, RemoveOptions } from "@/types/processing";
 
-const describe = (key: string): string => {
-	if (key.startsWith("fetch")) return "Downloading model";
-	if (key.startsWith("compute")) return "Removing background";
-	return "Working";
-};
-
-const runtimeConfig = (options: Pick<RemoveOptions, "model">, device: "cpu" | "gpu") => {
-	return {
-		model: options.model,
-		device,
-		output: { format: "image/png" as const },
-	};
-};
+/** Share of the progress bar reserved for downloading the selected model. */
+const DOWNLOAD_SHARE = 0.5;
 
 const isWebGpuBackendError = (error: unknown): boolean => {
 	const message = error instanceof Error ? `${error.message} ${String(error.cause ?? "")}` : String(error);
@@ -23,6 +14,17 @@ const isWebGpuBackendError = (error: unknown): boolean => {
 
 const shouldRetryWithCpu = (device: ProcessingDevice, error: unknown): boolean => {
 	return device === "auto" && isWebGpuBackendError(error);
+};
+
+const runOnDevice = async <T>(device: ProcessingDevice, run: (device: "cpu" | "gpu") => Promise<T>, onFallback: () => void): Promise<T> => {
+	const resolved = await resolveProcessingDevice(device);
+	try {
+		return await run(resolved);
+	} catch (error) {
+		if (!shouldRetryWithCpu(device, error)) throw error;
+		onFallback();
+		return run("cpu");
+	}
 };
 
 const encodePng = async (canvas: HTMLCanvasElement): Promise<Blob> => {
@@ -153,53 +155,86 @@ const applyMatteAlgorithm = async (blob: Blob, algorithm: MatteAlgorithm): Promi
 	}
 };
 
-export const preloadBackgroundModel = async (options: PreloadOptions): Promise<void> => {
-	const { preload } = await import("@imgly/background-removal");
-	const runPreload = async (device: ProcessingDevice): Promise<void> => {
-		const resolvedDevice = await resolveProcessingDevice(device);
-		await preload({
-			...runtimeConfig(options, resolvedDevice),
-			progress: (key: string, current: number, total: number) => {
-				const fraction = total > 0 ? Math.min(1, current / total) : 0;
-				options.onProgress?.(fraction, describe(key));
-			},
-		});
-	};
+/** Converts RGBA pixels into the normalized planar RGB tensor the model expects. */
+const normalizePixels = (rgba: Uint8ClampedArray, size: number): Float32Array => {
+	const stride = size * size;
+	const planar = new Float32Array(3 * stride);
+	for (let pixel = 0, offset = 0; pixel < stride; pixel += 1, offset += 4) {
+		planar[pixel] = (rgba[offset] - MODEL_INPUT_MEAN) / MODEL_INPUT_STD;
+		planar[pixel + stride] = (rgba[offset + 1] - MODEL_INPUT_MEAN) / MODEL_INPUT_STD;
+		planar[pixel + 2 * stride] = (rgba[offset + 2] - MODEL_INPUT_MEAN) / MODEL_INPUT_STD;
+	}
+	return planar;
+};
 
+/** Runs the IS-Net session and composites the returned mask onto the full-size source. */
+const segmentImage = async (file: File | Blob, session: SegmentationSession): Promise<Blob> => {
+	const url = URL.createObjectURL(file);
 	try {
-		await runPreload(options.device);
-	} catch (error) {
-		if (!shouldRetryWithCpu(options.device, error)) throw error;
-		options.onProgress?.(0, "WebGPU unavailable; retrying with CPU");
-		await runPreload("cpu");
+		const image = await loadImage(url);
+		const width = image.naturalWidth;
+		const height = image.naturalHeight;
+		if (!width || !height) throw new Error("Could not decode image");
+
+		const size = session.inputSize;
+		const maskCanvas = document.createElement("canvas");
+		maskCanvas.width = size;
+		maskCanvas.height = size;
+		const maskContext = maskCanvas.getContext("2d", { willReadFrequently: true });
+		if (!maskContext) throw new Error("Canvas is not available");
+		maskContext.drawImage(image, 0, 0, size, size);
+
+		const input = normalizePixels(maskContext.getImageData(0, 0, size, size).data, size);
+		const alpha = await session.run(input);
+		const mask = maskContext.createImageData(size, size);
+		for (let pixel = 0; pixel < size * size; pixel += 1) {
+			mask.data[pixel * 4 + 3] = Math.round(Math.max(0, Math.min(1, alpha[pixel] ?? 0)) * 255);
+		}
+		maskContext.putImageData(mask, 0, 0);
+
+		const output = document.createElement("canvas");
+		output.width = width;
+		output.height = height;
+		const outputContext = output.getContext("2d");
+		if (!outputContext) throw new Error("Canvas is not available");
+		outputContext.drawImage(image, 0, 0, width, height);
+		outputContext.globalCompositeOperation = "destination-in";
+		outputContext.imageSmoothingQuality = "high";
+		outputContext.drawImage(maskCanvas, 0, 0, width, height);
+		return encodePng(output);
+	} finally {
+		URL.revokeObjectURL(url);
 	}
 };
 
+export const preloadBackgroundModel = async (options: PreloadOptions): Promise<void> => {
+	await runOnDevice(
+		options.device,
+		async (device) => {
+			await getSegmentationSession(options.model, device, (fraction) => {
+				options.onProgress?.(fraction, "Downloading model");
+			});
+		},
+		() => options.onProgress?.(0, "WebGPU unavailable; retrying with CPU"),
+	);
+};
+
 /**
- * Runs the background removal entirely in the browser (WASM).
- * The library is imported lazily so the ~large model runtime never touches SSR.
+ * Runs IS-Net through ONNX Runtime Web entirely in the browser.
+ * Runtime, weights, and WASM are imported lazily so nothing touches SSR.
  */
 export const removeImageBackground = async (file: File | Blob, options: RemoveOptions): Promise<Blob> => {
-	const { removeBackground } = await import("@imgly/background-removal");
-	const runRemoval = async (device: ProcessingDevice): Promise<Blob> => {
-		const resolvedDevice = await resolveProcessingDevice(device);
-		return removeBackground(file, {
-			...runtimeConfig(options, resolvedDevice),
-			progress: (key: string, current: number, total: number) => {
-				const fraction = total > 0 ? Math.min(0.9, (current / total) * 0.9) : 0;
-				options.onProgress?.(fraction, describe(key));
-			},
-		});
-	};
-
-	let cutout: Blob;
-	try {
-		cutout = await runRemoval(options.device);
-	} catch (error) {
-		if (!shouldRetryWithCpu(options.device, error)) throw error;
-		options.onProgress?.(0, "WebGPU unavailable; retrying with CPU");
-		cutout = await runRemoval("cpu");
-	}
+	const cutout = await runOnDevice(
+		options.device,
+		async (device) => {
+			const session = await getSegmentationSession(options.model, device, (fraction) => {
+				options.onProgress?.(Math.min(DOWNLOAD_SHARE, fraction * DOWNLOAD_SHARE), "Downloading model");
+			});
+			options.onProgress?.(0.6, "Removing background");
+			return segmentImage(file, session);
+		},
+		() => options.onProgress?.(0, "WebGPU unavailable; retrying with CPU"),
+	);
 
 	options.onProgress?.(0.94, options.algorithm === "natural" ? "Finalizing cutout" : options.algorithm === "hair" ? "Sharpening fine edges" : "Refining edges");
 	const refined = await applyMatteAlgorithm(cutout, options.algorithm);

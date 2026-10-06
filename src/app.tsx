@@ -1,12 +1,12 @@
 import { Analytics } from "@vercel/analytics/react";
-import { ThemeProvider } from "next-themes";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
 import { Studio } from "@/components/studio/studio";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 export const App = () => {
 	return (
-		<ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="cutout-studio-theme">
+		<ThemeProvider>
 			<Studio />
 			<Toaster position="top-center" closeButton />
 			<ServiceWorkerRegistrar />

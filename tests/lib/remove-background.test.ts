@@ -1,19 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { preloadBackgroundModel, removeImageBackground } from "@/lib/remove-background";
 
-const backgroundRemovalMocks = vi.hoisted(() => ({
-	preload: vi.fn(),
-	removeBackground: vi.fn(),
+const inferenceMocks = vi.hoisted(() => ({
+	getSegmentationSession: vi.fn(),
 }));
 
 const runtimeCapabilityMocks = vi.hoisted(() => ({
 	resolveProcessingDevice: vi.fn(),
 }));
 
-vi.mock("@imgly/background-removal", () => backgroundRemovalMocks);
+vi.mock("@/lib/onnx-runtime", () => inferenceMocks);
 vi.mock("@/lib/runtime-capabilities", () => runtimeCapabilityMocks);
 
-const installRefinementEnvironment = (alphaValues: number[]) => {
+const MASK_SIDE = 1024;
+
+const installCanvasEnvironment = (alphaValues: number[]) => {
 	class ImageMock {
 		onerror: (() => void) | null = null;
 		onload: (() => void) | null = null;
@@ -31,8 +32,11 @@ const installRefinementEnvironment = (alphaValues: number[]) => {
 	});
 	const imageData = { data: pixels } as ImageData;
 	const context = {
+		createImageData: vi.fn(() => imageData),
 		drawImage: vi.fn(),
 		getImageData: vi.fn(() => imageData),
+		globalCompositeOperation: "source-over",
+		imageSmoothingQuality: "high",
 		putImageData: vi.fn(),
 	};
 	const encoded = new Blob(["refined"], { type: "image/png" });
@@ -47,7 +51,7 @@ const installRefinementEnvironment = (alphaValues: number[]) => {
 		canvases.push(canvas);
 		return canvas;
 	};
-	const createObjectURL = vi.fn(() => "blob:temporary-cutout");
+	const createObjectURL = vi.fn(() => "blob:source");
 	const revokeObjectURL = vi.fn();
 
 	vi.stubGlobal("Image", ImageMock);
@@ -57,23 +61,26 @@ const installRefinementEnvironment = (alphaValues: number[]) => {
 	return { canvases, context, encoded, imageData, revokeObjectURL };
 };
 
+const sessionFor = (alphaValues: number[]) => ({
+	inputSize: MASK_SIDE,
+	run: vi.fn(async () => Float32Array.from(alphaValues, (alpha) => alpha / 255)),
+});
+
 beforeEach(() => {
-	backgroundRemovalMocks.preload.mockReset();
-	backgroundRemovalMocks.removeBackground.mockReset();
+	inferenceMocks.getSegmentationSession.mockReset();
 	runtimeCapabilityMocks.resolveProcessingDevice.mockReset();
 	runtimeCapabilityMocks.resolveProcessingDevice.mockImplementation(async (device: string) => (device === "auto" ? "gpu" : device));
 	vi.unstubAllGlobals();
 });
 
 describe("model runtime configuration", () => {
-	it("maps auto to WebGPU and caps model progress before refinement", async () => {
-		const cutout = new Blob(["cutout"], { type: "image/png" });
+	it("runs the selected model on WebGPU and reports staged progress", async () => {
+		const { encoded } = installCanvasEnvironment([0]);
 		const progress = vi.fn();
-		backgroundRemovalMocks.removeBackground.mockImplementation(async (...args: unknown[]) => {
-			const config = args[1] as { progress: (key: string, current: number, total: number) => void };
-			config.progress("fetch:model", 1, 2);
-			config.progress("compute:mask", 4, 4);
-			return cutout;
+		inferenceMocks.getSegmentationSession.mockImplementation(async (...args: unknown[]) => {
+			const onProgress = args[2] as ((fraction: number) => void) | undefined;
+			onProgress?.(0.75);
+			return sessionFor([0]);
 		});
 
 		await expect(
@@ -83,56 +90,54 @@ describe("model runtime configuration", () => {
 				model: "isnet_fp16",
 				onProgress: progress,
 			}),
-		).resolves.toBe(cutout);
+		).resolves.toBe(encoded);
 
-		const config = backgroundRemovalMocks.removeBackground.mock.calls[0]?.[1];
-		expect(config).toMatchObject({ device: "gpu", model: "isnet_fp16", output: { format: "image/png" } });
-		expect(progress).toHaveBeenCalledWith(0.45, "Downloading model");
-		expect(progress).toHaveBeenCalledWith(0.9, "Removing background");
+		expect(inferenceMocks.getSegmentationSession).toHaveBeenCalledWith("isnet_fp16", "gpu", expect.any(Function));
+		expect(progress).toHaveBeenCalledWith(0.375, "Downloading model");
+		expect(progress).toHaveBeenCalledWith(0.6, "Removing background");
 		expect(progress).toHaveBeenCalledWith(0.94, "Finalizing cutout");
 		expect(progress).toHaveBeenLastCalledWith(1, "Done");
 	});
 
 	it("preloads the selected model on the explicit device", async () => {
 		const progress = vi.fn();
-		backgroundRemovalMocks.preload.mockImplementation(async (...args: unknown[]) => {
-			const config = args[0] as { progress: (key: string, current: number, total: number) => void };
-			config.progress("fetch:model", 3, 4);
+		inferenceMocks.getSegmentationSession.mockImplementation(async (...args: unknown[]) => {
+			const onProgress = args[2] as ((fraction: number) => void) | undefined;
+			onProgress?.(0.5);
+			return sessionFor([0]);
 		});
 
 		await preloadBackgroundModel({ device: "cpu", model: "isnet_quint8", onProgress: progress });
 
-		expect(backgroundRemovalMocks.preload).toHaveBeenCalledWith(expect.objectContaining({ device: "cpu", model: "isnet_quint8", output: { format: "image/png" } }));
-		expect(progress).toHaveBeenCalledWith(0.75, "Downloading model");
+		expect(inferenceMocks.getSegmentationSession).toHaveBeenCalledWith("isnet_quint8", "cpu", expect.any(Function));
+		expect(progress).toHaveBeenCalledWith(0.5, "Downloading model");
 	});
 
 	it("uses CPU directly when automatic capability detection finds no GPU adapter", async () => {
-		const cutout = new Blob(["cutout"], { type: "image/png" });
+		const { encoded } = installCanvasEnvironment([0]);
 		runtimeCapabilityMocks.resolveProcessingDevice.mockResolvedValueOnce("cpu");
-		backgroundRemovalMocks.removeBackground.mockResolvedValue(cutout);
+		inferenceMocks.getSegmentationSession.mockResolvedValue(sessionFor([0]));
 
-		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "natural", device: "auto", model: "isnet_fp16" })).resolves.toBe(cutout);
-		expect(backgroundRemovalMocks.removeBackground.mock.calls[0]?.[1]).toMatchObject({ device: "cpu" });
+		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "natural", device: "auto", model: "isnet_fp16" })).resolves.toBe(encoded);
+		expect(inferenceMocks.getSegmentationSession).toHaveBeenCalledWith("isnet_fp16", "cpu", expect.any(Function));
 	});
 
 	it("retries automatic model preloading on CPU when WebGPU cannot initialize", async () => {
 		const progress = vi.fn();
-		backgroundRemovalMocks.preload.mockRejectedValueOnce(new Error("no available backend found. ERR: [webgpu] webgpuInit is not a function")).mockResolvedValueOnce(undefined);
+		inferenceMocks.getSegmentationSession.mockRejectedValueOnce(new Error("no available backend found. ERR: [webgpu] webgpuInit is not a function")).mockResolvedValueOnce(sessionFor([0]));
 
 		await expect(preloadBackgroundModel({ device: "auto", model: "isnet_quint8", onProgress: progress })).resolves.toBeUndefined();
 
-		expect(backgroundRemovalMocks.preload).toHaveBeenCalledTimes(2);
-		expect(backgroundRemovalMocks.preload.mock.calls[0]?.[0]).toMatchObject({ device: "gpu" });
-		expect(backgroundRemovalMocks.preload.mock.calls[1]?.[0]).toMatchObject({ device: "cpu" });
+		expect(inferenceMocks.getSegmentationSession).toHaveBeenCalledTimes(2);
+		expect(inferenceMocks.getSegmentationSession.mock.calls[0]?.[1]).toBe("gpu");
+		expect(inferenceMocks.getSegmentationSession.mock.calls[1]?.[1]).toBe("cpu");
 		expect(progress).toHaveBeenCalledWith(0, "WebGPU unavailable; retrying with CPU");
 	});
 
 	it("retries automatic removal on CPU when WebGPU cannot initialize", async () => {
-		const cutout = new Blob(["cutout"], { type: "image/png" });
+		const { encoded } = installCanvasEnvironment([0]);
 		const progress = vi.fn();
-		backgroundRemovalMocks.removeBackground
-			.mockRejectedValueOnce(new Error("no available backend found. ERR: [webgpu] webgpuInit is not a function"))
-			.mockResolvedValueOnce(cutout);
+		inferenceMocks.getSegmentationSession.mockRejectedValueOnce(new Error("no available backend found. ERR: [webgpu] webgpuInit is not a function")).mockResolvedValueOnce(sessionFor([0]));
 
 		await expect(
 			removeImageBackground(new Blob(["source"]), {
@@ -141,55 +146,45 @@ describe("model runtime configuration", () => {
 				model: "isnet_fp16",
 				onProgress: progress,
 			}),
-		).resolves.toBe(cutout);
+		).resolves.toBe(encoded);
 
-		expect(backgroundRemovalMocks.removeBackground).toHaveBeenCalledTimes(2);
-		expect(backgroundRemovalMocks.removeBackground.mock.calls[0]?.[1]).toMatchObject({ device: "gpu" });
-		expect(backgroundRemovalMocks.removeBackground.mock.calls[1]?.[1]).toMatchObject({ device: "cpu" });
+		expect(inferenceMocks.getSegmentationSession).toHaveBeenCalledTimes(2);
+		expect(inferenceMocks.getSegmentationSession.mock.calls[0]?.[1]).toBe("gpu");
+		expect(inferenceMocks.getSegmentationSession.mock.calls[1]?.[1]).toBe("cpu");
 		expect(progress).toHaveBeenCalledWith(0, "WebGPU unavailable; retrying with CPU");
 	});
 
 	it("does not override an explicitly selected WebGPU device", async () => {
 		const backendError = new Error("[webgpu] adapter initialization failed");
-		backgroundRemovalMocks.removeBackground.mockRejectedValue(backendError);
+		inferenceMocks.getSegmentationSession.mockRejectedValue(backendError);
 
 		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "natural", device: "gpu", model: "isnet" })).rejects.toBe(backendError);
-		expect(backgroundRemovalMocks.removeBackground).toHaveBeenCalledTimes(1);
+		expect(inferenceMocks.getSegmentationSession).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not mask unrelated errors while using automatic device selection", async () => {
-		const downloadError = new Error("Model download failed");
-		backgroundRemovalMocks.removeBackground.mockRejectedValue(downloadError);
+		const downloadError = new Error("The downloaded background model failed its integrity check");
+		inferenceMocks.getSegmentationSession.mockRejectedValue(downloadError);
 
 		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "natural", device: "auto", model: "isnet" })).rejects.toBe(downloadError);
-		expect(backgroundRemovalMocks.removeBackground).toHaveBeenCalledTimes(1);
-	});
-
-	it("handles progress events without totals", async () => {
-		const progress = vi.fn();
-		backgroundRemovalMocks.preload.mockImplementation(async (...args: unknown[]) => {
-			const config = args[0] as { progress: (key: string, current: number, total: number) => void };
-			config.progress("other", 0, 0);
-		});
-		await expect(preloadBackgroundModel({ device: "gpu", model: "isnet", onProgress: progress })).resolves.toBeUndefined();
-		expect(progress).toHaveBeenCalledWith(0, "Working");
+		expect(inferenceMocks.getSegmentationSession).toHaveBeenCalledTimes(1);
 	});
 });
 
 describe("matte refinement", () => {
 	it("creates a hard binary alpha edge", async () => {
-		const { imageData, revokeObjectURL } = installRefinementEnvironment([127, 128]);
-		backgroundRemovalMocks.removeBackground.mockResolvedValue(new Blob(["cutout"]));
+		const { imageData, revokeObjectURL } = installCanvasEnvironment([127, 128]);
+		inferenceMocks.getSegmentationSession.mockResolvedValue(sessionFor([127, 128]));
 
 		await removeImageBackground(new Blob(["source"]), { algorithm: "hard", device: "cpu", model: "isnet_quint8" });
 
 		expect([imageData.data[3], imageData.data[7]]).toEqual([0, 255]);
-		expect(revokeObjectURL).toHaveBeenCalledWith("blob:temporary-cutout");
+		expect(revokeObjectURL).toHaveBeenCalledWith("blob:source");
 	});
 
 	it("tightens semi-transparent edges while preserving endpoints", async () => {
-		const { imageData } = installRefinementEnvironment([0, 128, 255]);
-		backgroundRemovalMocks.removeBackground.mockResolvedValue(new Blob(["cutout"]));
+		const { imageData } = installCanvasEnvironment([0, 128, 255]);
+		inferenceMocks.getSegmentationSession.mockResolvedValue(sessionFor([0, 128, 255]));
 
 		await removeImageBackground(new Blob(["source"]), { algorithm: "refine", device: "cpu", model: "isnet_fp16" });
 
@@ -200,17 +195,17 @@ describe("matte refinement", () => {
 	});
 
 	it("softens neighboring alpha values", async () => {
-		const { encoded, imageData } = installRefinementEnvironment([0, 255, 0]);
-		backgroundRemovalMocks.removeBackground.mockResolvedValue(new Blob(["cutout"]));
+		const { encoded, imageData } = installCanvasEnvironment([0, 255, 0]);
+		inferenceMocks.getSegmentationSession.mockResolvedValue(sessionFor([0, 255, 0]));
 
 		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "soft", device: "cpu", model: "isnet" })).resolves.toBe(encoded);
 		expect([imageData.data[3], imageData.data[7], imageData.data[11]]).toEqual([38, 179, 38]);
 	});
 
 	it("sharpens isolated semi-transparent hair detail without destroying transparent pixels", async () => {
-		const { imageData } = installRefinementEnvironment([0, 0, 80, 0, 255]);
+		const { imageData } = installCanvasEnvironment([0, 0, 80, 0, 255]);
 		const progress = vi.fn();
-		backgroundRemovalMocks.removeBackground.mockResolvedValue(new Blob(["cutout"]));
+		inferenceMocks.getSegmentationSession.mockResolvedValue(sessionFor([0, 0, 80, 0, 255]));
 
 		await removeImageBackground(new Blob(["source"]), { algorithm: "hair", device: "cpu", model: "isnet", onProgress: progress });
 
@@ -222,24 +217,24 @@ describe("matte refinement", () => {
 	});
 
 	it("revokes temporary URLs when a canvas is unavailable", async () => {
-		const { revokeObjectURL } = installRefinementEnvironment([255]);
+		const { revokeObjectURL } = installCanvasEnvironment([255]);
 		vi.stubGlobal("document", { createElement: vi.fn(() => ({ getContext: () => null })) });
-		backgroundRemovalMocks.removeBackground.mockResolvedValue(new Blob(["cutout"]));
+		inferenceMocks.getSegmentationSession.mockResolvedValue(sessionFor([255]));
 
 		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "refine", device: "cpu", model: "isnet" })).rejects.toThrow("Canvas is not available");
-		expect(revokeObjectURL).toHaveBeenCalledWith("blob:temporary-cutout");
+		expect(revokeObjectURL).toHaveBeenCalledWith("blob:source");
 	});
 
 	it("refines oversized cutouts at a capped resolution instead of crashing the tab", async () => {
-		const { canvases, context, encoded } = installRefinementEnvironment(Array.from({ length: 5000 }, () => 0));
-		backgroundRemovalMocks.removeBackground.mockResolvedValue(new Blob(["cutout"]));
+		const { canvases, context, encoded } = installCanvasEnvironment(Array.from({ length: 5000 }, () => 0));
+		inferenceMocks.getSegmentationSession.mockResolvedValue(sessionFor(Array.from({ length: 5000 }, () => 0)));
 
 		await expect(removeImageBackground(new Blob(["source"]), { algorithm: "hard", device: "cpu", model: "isnet_quint8" })).resolves.toBe(encoded);
 
-		expect(canvases[0]?.width).toBe(4096);
-		expect(canvases[0]?.height).toBe(1);
-		expect(canvases[1]?.width).toBe(5000);
-		expect(context.drawImage).toHaveBeenCalledTimes(2);
-		expect(context.drawImage).toHaveBeenLastCalledWith(canvases[0], 0, 0, 5000, 1);
+		expect(canvases[0]?.width).toBe(MASK_SIDE);
+		expect(canvases[2]?.width).toBe(4096);
+		expect(canvases[2]?.height).toBe(1);
+		expect(canvases[3]?.width).toBe(5000);
+		expect(context.drawImage).toHaveBeenLastCalledWith(canvases[2], 0, 0, 5000, 1);
 	});
 });
