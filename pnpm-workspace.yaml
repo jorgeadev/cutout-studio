@@ -17,5 +17,8 @@ blockExoticSubdeps: true
 catalog:
   # ONNX Runtime Web runs the pinned IS-Net model directly in the browser.
   onnxruntime-web: 1.30.0
+# GHSA-68fv-2mgg-jv7q: event-loop DoS via indexed source-map section offsets.
+overrides:
+  source-map-js: 1.2.2
 allowBuilds:
   protobufjs: false
