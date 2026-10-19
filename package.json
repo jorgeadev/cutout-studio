@@ -61,7 +61,7 @@
 		"@types/react-dom": "19.3.0",
 		"@vitejs/plugin-react": "6.1.2",
 		"@vitest/coverage-v8": "5.0.3",
-		"postcss": "8.5.29",
+		"postcss": "8.5.30",
 		"tailwindcss": "4.3.3",
 		"typescript": "7.0.2",
 		"vite": "8.3.4",
